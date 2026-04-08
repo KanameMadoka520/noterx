@@ -1,47 +1,47 @@
 {
   "food": {
-    "sample_size": 100,
-    "score_engagement_correlation": 0.051,
-    "p_value": 0.614591,
+    "sample_size": 183,
+    "score_engagement_correlation": 0.0947,
+    "p_value": 0.202414,
     "significant": false,
-    "viral_avg_score": 76.3,
-    "normal_avg_score": 73.7,
-    "score_gap": 2.5,
-    "classification_accuracy": 52.0
+    "viral_avg_score": 78.6,
+    "normal_avg_score": 73.8,
+    "score_gap": 4.8,
+    "classification_accuracy": 50.8
   },
   "fashion": {
-    "sample_size": 200,
-    "score_engagement_correlation": -0.0904,
-    "p_value": 0.202995,
+    "sample_size": 259,
+    "score_engagement_correlation": -0.1027,
+    "p_value": 0.099218,
     "significant": false,
-    "viral_avg_score": 71.0,
-    "normal_avg_score": 72.0,
-    "score_gap": -1.0,
-    "classification_accuracy": 51.0
+    "viral_avg_score": 71.5,
+    "normal_avg_score": 72.4,
+    "score_gap": -0.9,
+    "classification_accuracy": 50.2
   },
   "tech": {
-    "sample_size": 101,
-    "score_engagement_correlation": 0.1793,
-    "p_value": 0.072746,
-    "significant": false,
-    "viral_avg_score": 78.2,
-    "normal_avg_score": 72.6,
-    "score_gap": 5.6,
-    "classification_accuracy": 51.5
+    "sample_size": 213,
+    "score_engagement_correlation": 0.1927,
+    "p_value": 0.004777,
+    "significant": true,
+    "viral_avg_score": 75.4,
+    "normal_avg_score": 73.1,
+    "score_gap": 2.3,
+    "classification_accuracy": 49.3
   },
   "travel": {
-    "sample_size": 100,
-    "score_engagement_correlation": -0.0455,
-    "p_value": 0.652918,
+    "sample_size": 130,
+    "score_engagement_correlation": -0.0645,
+    "p_value": 0.466146,
     "significant": false,
-    "viral_avg_score": 69.9,
-    "normal_avg_score": 70.0,
-    "score_gap": -0.1,
-    "classification_accuracy": 48.0
+    "viral_avg_score": 72.3,
+    "normal_avg_score": 70.3,
+    "score_gap": 2.0,
+    "classification_accuracy": 52.3
   },
   "_overall": {
-    "total_samples": 501,
-    "correlation": -0.0364,
-    "p_value": 0.415809
+    "total_samples": 785,
+    "correlation": 0.0153,
+    "p_value": 0.667672
   }
 }

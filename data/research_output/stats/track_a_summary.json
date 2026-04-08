@@ -1,6 +1,7 @@
 {
-  "total_notes": 501,
+  "total_notes": 797,
   "categories": [
+    "other",
     "travel",
     "fashion",
     "tech",
@@ -16,6 +17,7 @@
   ],
   "charts_generated": [
     "regression_coefficients.png",
+    "model_validation.png",
     "boxplot_engagement.png",
     "correlation_heatmap.png",
     "category_radar.png",

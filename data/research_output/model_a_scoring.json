@@ -1,19 +1,19 @@
 {
   "food": {
     "weights": {
-      "title_quality": 0.398,
-      "content_quality": 0.202,
-      "visual_quality": 0.094,
-      "tag_strategy": 0.043,
-      "engagement_potential": 0.263
+      "title_quality": 0.615,
+      "content_quality": 0.121,
+      "visual_quality": 0.088,
+      "tag_strategy": 0.103,
+      "engagement_potential": 0.072
     },
     "scoring_params": {
       "title_length": {
         "optimal": {
-          "min": 12.0,
-          "max": 20.0
+          "min": 11.0,
+          "max": 19.0
         },
-        "viral_avg": 18.6
+        "viral_avg": 18.32
       },
       "tag_count": {
         "optimal": {
@@ -24,36 +24,36 @@
       },
       "content_length": {
         "optimal": {
-          "min": 115.5,
-          "max": 311.75
+          "min": 104.5,
+          "max": 341.5
         }
       },
       "image_count": {
         "optimal": {
-          "min": 0.0,
-          "max": 9.0
+          "min": 2.0,
+          "max": 10.0
         }
       }
     },
     "baseline": {
-      "avg_engagement": 46686.14,
-      "median_engagement": 17673.0,
-      "viral_threshold": 139935.7,
-      "viral_rate": 10.0,
-      "sample_size": 100
+      "avg_engagement": 33462.14,
+      "median_engagement": 7333.0,
+      "viral_threshold": 112965.0,
+      "viral_rate": 10.4,
+      "sample_size": 183
     },
-    "regression_r_squared": 0.1355,
+    "regression_r_squared": 0.1049,
     "title_patterns": [],
     "content_structure": [],
     "top_tags": []
   },
   "fashion": {
     "weights": {
-      "title_quality": 0.292,
-      "content_quality": 0.219,
-      "visual_quality": 0.21,
-      "tag_strategy": 0.055,
-      "engagement_potential": 0.224
+      "title_quality": 0.337,
+      "content_quality": 0.209,
+      "visual_quality": 0.182,
+      "tag_strategy": 0.016,
+      "engagement_potential": 0.256
     },
     "scoring_params": {
       "title_length": {
@@ -61,7 +61,7 @@
           "min": 11.0,
           "max": 20.0
         },
-        "viral_avg": 15.65
+        "viral_avg": 14.5
       },
       "tag_count": {
         "optimal": {
@@ -72,8 +72,8 @@
       },
       "content_length": {
         "optimal": {
-          "min": 94.75,
-          "max": 237.75
+          "min": 94.0,
+          "max": 228.0
         }
       },
       "image_count": {
@@ -84,32 +84,32 @@
       }
     },
     "baseline": {
-      "avg_engagement": 7788.16,
-      "median_engagement": 2037.0,
-      "viral_threshold": 20564.6,
+      "avg_engagement": 7991.72,
+      "median_engagement": 2400.0,
+      "viral_threshold": 20065.6,
       "viral_rate": 10.0,
-      "sample_size": 200
+      "sample_size": 259
     },
-    "regression_r_squared": 0.0211,
+    "regression_r_squared": 0.0308,
     "title_patterns": [],
     "content_structure": [],
     "top_tags": []
   },
   "tech": {
     "weights": {
-      "title_quality": 0.5,
-      "content_quality": 0.041,
-      "visual_quality": 0.08,
-      "tag_strategy": 0.145,
-      "engagement_potential": 0.234
+      "title_quality": 0.484,
+      "content_quality": 0.074,
+      "visual_quality": 0.102,
+      "tag_strategy": 0.104,
+      "engagement_potential": 0.236
     },
     "scoring_params": {
       "title_length": {
         "optimal": {
-          "min": 7.0,
-          "max": 19.0
+          "min": 12.0,
+          "max": 20.0
         },
-        "viral_avg": 14.64
+        "viral_avg": 17.64
       },
       "tag_count": {
         "optimal": {
@@ -120,44 +120,44 @@
       },
       "content_length": {
         "optimal": {
-          "min": 72.0,
-          "max": 446.0
+          "min": 106.0,
+          "max": 576.0
         }
       },
       "image_count": {
         "optimal": {
           "min": 1.0,
-          "max": 4.0
+          "max": 6.0
         }
       }
     },
     "baseline": {
-      "avg_engagement": 828.87,
-      "median_engagement": 44.0,
-      "viral_threshold": 1515.0,
-      "viral_rate": 10.9,
-      "sample_size": 101
+      "avg_engagement": 1321.38,
+      "median_engagement": 186.0,
+      "viral_threshold": 3341.6,
+      "viral_rate": 10.3,
+      "sample_size": 213
     },
-    "regression_r_squared": 0.1411,
+    "regression_r_squared": 0.1928,
     "title_patterns": [],
     "content_structure": [],
     "top_tags": []
   },
   "travel": {
     "weights": {
-      "title_quality": 0.288,
-      "content_quality": 0.069,
-      "visual_quality": 0.125,
-      "tag_strategy": 0.349,
-      "engagement_potential": 0.169
+      "title_quality": 0.36,
+      "content_quality": 0.039,
+      "visual_quality": 0.119,
+      "tag_strategy": 0.316,
+      "engagement_potential": 0.167
     },
     "scoring_params": {
       "title_length": {
         "optimal": {
-          "min": 10.0,
-          "max": 18.0
+          "min": 11.0,
+          "max": 19.75
         },
-        "viral_avg": 13.9
+        "viral_avg": 14.31
       },
       "tag_count": {
         "optimal": {
@@ -168,25 +168,25 @@
       },
       "content_length": {
         "optimal": {
-          "min": 106.75,
-          "max": 505.0
+          "min": 123.0,
+          "max": 736.75
         }
       },
       "image_count": {
         "optimal": {
-          "min": 2.0,
-          "max": 12.0
+          "min": 4.0,
+          "max": 13.75
         }
       }
     },
     "baseline": {
-      "avg_engagement": 17236.18,
-      "median_engagement": 4393.0,
-      "viral_threshold": 40026.3,
+      "avg_engagement": 16562.52,
+      "median_engagement": 4537.5,
+      "viral_threshold": 39425.5,
       "viral_rate": 10.0,
-      "sample_size": 100
+      "sample_size": 130
     },
-    "regression_r_squared": 0.1077,
+    "regression_r_squared": 0.1386,
     "title_patterns": [],
     "content_structure": [],
     "top_tags": []

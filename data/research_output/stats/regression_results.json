@@ -1,58 +1,58 @@
 {
   "travel": {
-    "r_squared": 0.1077,
+    "r_squared": 0.1386,
     "coefficients": {
-      "title_length": 0.0308,
-      "tag_count": 0.5577,
-      "has_numbers": 0.0845,
-      "image_count": 0.1916,
-      "content_length": -0.1099,
-      "has_emoji": -0.0786,
-      "title_hook_count": -0.3446
+      "title_length": 0.0694,
+      "tag_count": 0.5316,
+      "has_numbers": -0.0385,
+      "image_count": 0.1464,
+      "content_length": -0.065,
+      "has_emoji": -0.1337,
+      "title_hook_count": -0.4969
     },
-    "intercept": 8.2528,
-    "sample_size": 100
+    "intercept": 8.2864,
+    "sample_size": 130
   },
   "fashion": {
-    "r_squared": 0.0211,
+    "r_squared": 0.0308,
     "coefficients": {
-      "title_length": -0.0681,
-      "tag_count": -0.0522,
-      "has_numbers": -0.1125,
-      "image_count": 0.0837,
-      "content_length": -0.2078,
-      "has_emoji": 0.1293,
-      "title_hook_count": 0.0972
+      "title_length": -0.1304,
+      "tag_count": 0.0176,
+      "has_numbers": -0.1349,
+      "image_count": 0.2104,
+      "content_length": -0.2294,
+      "has_emoji": 0.0714,
+      "title_hook_count": 0.1056
     },
-    "intercept": 7.4892,
-    "sample_size": 200
+    "intercept": 7.6568,
+    "sample_size": 259
   },
   "tech": {
-    "r_squared": 0.1411,
+    "r_squared": 0.1928,
     "coefficients": {
-      "title_length": 0.7268,
-      "tag_count": 0.3627,
-      "has_numbers": -0.1743,
-      "image_count": -0.4651,
-      "content_length": 0.104,
-      "has_emoji": -0.1223,
-      "title_hook_count": 0.3534
+      "title_length": 0.6832,
+      "tag_count": 0.2031,
+      "has_numbers": 0.2585,
+      "image_count": 0.3719,
+      "content_length": 0.1441,
+      "has_emoji": -0.0915,
+      "title_hook_count": -0.0073
     },
-    "intercept": 3.8577,
-    "sample_size": 101
+    "intercept": 4.9143,
+    "sample_size": 213
   },
   "food": {
-    "r_squared": 0.1355,
+    "r_squared": 0.1049,
     "coefficients": {
-      "title_length": 0.5518,
-      "tag_count": -0.0917,
-      "has_numbers": -0.1134,
-      "image_count": 0.234,
-      "content_length": -0.4295,
-      "has_emoji": 0.3256,
-      "title_hook_count": 0.1826
+      "title_length": 0.7415,
+      "tag_count": 0.2345,
+      "has_numbers": -0.3503,
+      "image_count": 0.1089,
+      "content_length": -0.2745,
+      "has_emoji": 0.0558,
+      "title_hook_count": 0.3065
     },
-    "intercept": 9.3359,
-    "sample_size": 100
+    "intercept": 8.2729,
+    "sample_size": 183
   }
 }
