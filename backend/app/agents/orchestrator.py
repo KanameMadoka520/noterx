@@ -1,6 +1,7 @@
 """
 多 Agent 编排器
 管理诊断流程：解析 -> baseline对比 -> 并行Agent诊断 -> 辩论 -> 综合裁判。
+模型分配：pro(深度分析) / omni(图像理解) / flash(快速任务)
 """
 from __future__ import annotations
 
@@ -14,6 +15,7 @@ from typing import Optional
 from app.analysis.text_analyzer import TextAnalyzer
 from app.analysis.image_analyzer import ImageAnalyzer
 from app.baseline.comparator import BaselineComparator
+from app.agents.base_agent import MODEL_PRO
 from app.agents.content_agent import ContentAgent
 from app.agents.visual_agent import VisualAgent
 from app.agents.growth_agent import GrowthAgent
@@ -95,16 +97,6 @@ class Orchestrator:
         tags: list[str],
         cover_image: Optional[bytes] = None,
     ) -> dict:
-        """
-        执行完整的多 Agent 诊断流程。
-
-        @param title - 笔记标题
-        @param content - 笔记正文
-        @param category - 垂类
-        @param tags - 标签列表
-        @param cover_image - 封面图片字节
-        @returns dict - 完整诊断报告
-        """
         t0 = time.time()
 
         # --- Step 1: 多模态内容解析 ---
@@ -132,40 +124,29 @@ class Orchestrator:
 
         baseline_comparison = self.baseline_comparator.compare(category, note_features)
 
-        # --- Step 3: 并行 Agent 诊断（Round 1） ---
+        # --- Step 3: 并行 Agent 诊断（Round 1）---
         t1 = time.time()
-        content_agent = ContentAgent(model=self.model)
-        visual_agent = VisualAgent(model=self.model)
-        growth_agent = GrowthAgent(model=self.model)
-        user_sim_agent = UserSimAgent(model=self.model)
+        content_agent = ContentAgent(model=MODEL_PRO)
+        visual_agent = VisualAgent(model=MODEL_PRO)
+        growth_agent = GrowthAgent(model=MODEL_PRO)
+        user_sim_agent = UserSimAgent(model=MODEL_PRO)
 
         round1_tasks = [
             content_agent.diagnose(
-                title=title,
-                content=content,
-                category=category,
-                title_analysis=title_analysis,
-                content_analysis=content_analysis,
+                title=title, content=content, category=category,
+                title_analysis=title_analysis, content_analysis=content_analysis,
                 baseline_comparison=baseline_comparison,
             ),
             visual_agent.diagnose(
-                title=title,
-                category=category,
-                image_analysis=image_analysis,
-                baseline_comparison=baseline_comparison,
+                title=title, category=category,
+                image_analysis=image_analysis, baseline_comparison=baseline_comparison,
             ),
             growth_agent.diagnose(
-                title=title,
-                content=content,
-                category=category,
-                tags=tags,
-                baseline_comparison=baseline_comparison,
+                title=title, content=content, category=category,
+                tags=tags, baseline_comparison=baseline_comparison,
             ),
             user_sim_agent.diagnose(
-                title=title,
-                content=content,
-                category=category,
-                tags=tags,
+                title=title, content=content, category=category, tags=tags,
             ),
         ]
 
@@ -175,29 +156,19 @@ class Orchestrator:
         for op in opinions:
             if isinstance(op, Exception):
                 agent_opinions.append({
-                    "agent_name": "Unknown",
-                    "dimension": "error",
-                    "score": 0,
-                    "issues": [str(op)],
-                    "suggestions": [],
-                    "reasoning": str(op),
+                    "agent_name": "Unknown", "dimension": "error", "score": 0,
+                    "issues": [str(op)], "suggestions": [], "reasoning": str(op),
                 })
             else:
                 meta = op.pop("_meta", None)
                 if meta:
                     round1_tokens += meta.get("total_tokens", 0)
-                    logger.info(
-                        "  [%s] tokens=%d (prompt=%d, completion=%d)",
-                        op.get("agent_name", "?"),
-                        meta.get("total_tokens", 0),
-                        meta.get("prompt_tokens", 0),
-                        meta.get("completion_tokens", 0),
-                    )
+                    logger.info("  [%s] tokens=%d", op.get("agent_name", "?"), meta.get("total_tokens", 0))
                 agent_opinions.append(op)
 
         logger.info("Round 1 诊断耗时 %.1fs，tokens=%d", time.time() - t1, round1_tokens)
 
-        # --- Step 4: Agent 辩论（Round 2） ---
+        # --- Step 4: Agent 辩论（Round 2）---
         t2 = time.time()
         agents_list = [content_agent, visual_agent, growth_agent, user_sim_agent]
         debate_records, debate_tokens = await self._run_debate(agent_opinions, agents_list)
@@ -205,18 +176,16 @@ class Orchestrator:
 
         # --- Step 5: 综合裁判 ---
         t3 = time.time()
-        judge = JudgeAgent(model=self.model)
+        judge = JudgeAgent(model=MODEL_PRO)
         final_report = await judge.diagnose(
-            title=title,
-            category=category,
-            agent_opinions=agent_opinions,
-            debate_records=debate_records,
+            title=title, category=category,
+            agent_opinions=agent_opinions, debate_records=debate_records,
         )
         judge_meta = final_report.pop("_meta", None)
         judge_tokens = judge_meta.get("total_tokens", 0) if judge_meta else 0
         logger.info("裁判耗时 %.1fs，tokens=%d", time.time() - t3, judge_tokens)
 
-        # --- Step 6: 组装最终响应 ---
+        # --- Step 6: 组装响应 ---
         simulated_comments = []
         for op in agent_opinions:
             if "simulated_comments" in op:
@@ -226,39 +195,22 @@ class Orchestrator:
         debate_timeline = self._build_debate_timeline(debate_records)
 
         total_time = time.time() - t0
-        logger.info(
-            "诊断完成 | 总耗时=%.1fs | 总tokens≈%d (R1=%d, debate=%d, judge=%d)",
-            total_time, round1_tokens + debate_tokens + judge_tokens,
-            round1_tokens, debate_tokens, judge_tokens,
-        )
+        logger.info("诊断完成 | 总耗时=%.1fs | 总tokens≈%d",
+                     total_time, round1_tokens + debate_tokens + judge_tokens)
 
         return self._assemble_response(
             final_report, agent_opinions, simulated_comments, debate_timeline
         )
 
-    async def _run_debate(
-        self, opinions: list[dict], agents: list
-    ) -> tuple[list[dict], int]:
-        """
-        让各 Agent 审阅彼此的意见并辩论。
-
-        @param opinions - Round 1 的各 Agent 意见
-        @param agents - Agent 实例列表
-        @returns tuple (debate_records, total_tokens)
-        """
+    async def _run_debate(self, opinions: list[dict], agents: list) -> tuple[list[dict], int]:
         debate_tasks = []
         for i, agent in enumerate(agents):
-            other_opinions = [
-                op for j, op in enumerate(opinions) if j != i
-            ]
+            other_opinions = [op for j, op in enumerate(opinions) if j != i]
             other_text = json.dumps(other_opinions, ensure_ascii=False, indent=2)
             prompt = DEBATE_PROMPT.format(
-                agent_name=agent.agent_name,
-                other_opinions=other_text,
+                agent_name=agent.agent_name, other_opinions=other_text,
             )
-            debate_tasks.append(
-                agent.call_llm(prompt, system_override=agent.system_prompt)
-            )
+            debate_tasks.append(agent.call_llm(prompt, system_override=agent.system_prompt))
 
         results = await asyncio.gather(*debate_tasks, return_exceptions=True)
         debate_records = []
@@ -276,32 +228,18 @@ class Orchestrator:
         return debate_records, debate_tokens
 
     def _build_debate_timeline(self, debate_records: list[dict]) -> list[dict]:
-        """将辩论记录转为结构化时间线"""
         timeline = []
         for record in debate_records:
             name = record.get("agent_name", "")
             for text in record.get("agreements", []):
-                timeline.append({
-                    "round": 2, "agent_name": name, "kind": "agree", "text": text,
-                })
+                timeline.append({"round": 2, "agent_name": name, "kind": "agree", "text": text})
             for text in record.get("disagreements", []):
-                timeline.append({
-                    "round": 2, "agent_name": name, "kind": "rebuttal", "text": text,
-                })
+                timeline.append({"round": 2, "agent_name": name, "kind": "rebuttal", "text": text})
             for text in record.get("additions", []):
-                timeline.append({
-                    "round": 2, "agent_name": name, "kind": "add", "text": text,
-                })
+                timeline.append({"round": 2, "agent_name": name, "kind": "add", "text": text})
         return timeline
 
-    def _assemble_response(
-        self,
-        final_report: dict,
-        agent_opinions: list[dict],
-        simulated_comments: list,
-        debate_timeline: list[dict],
-    ) -> dict:
-        """将裁判报告组装为标准 API 响应格式"""
+    def _assemble_response(self, final_report, agent_opinions, simulated_comments, debate_timeline) -> dict:
         radar = final_report.get("radar_data", {})
         is_llm_error = final_report.get("dimension") == "error"
         if not radar:
@@ -375,13 +313,8 @@ class Orchestrator:
         }
 
     def _calc_grade(self, score: float) -> str:
-        """根据分数计算等级"""
-        if score >= 90:
-            return "S"
-        if score >= 75:
-            return "A"
-        if score >= 60:
-            return "B"
-        if score >= 40:
-            return "C"
+        if score >= 90: return "S"
+        if score >= 75: return "A"
+        if score >= 60: return "B"
+        if score >= 40: return "C"
         return "D"

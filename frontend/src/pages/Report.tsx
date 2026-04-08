@@ -1,45 +1,69 @@
+import { useEffect } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import {
-  Box, Typography, Button, Card, CardContent, Alert, Stack, IconButton, Tooltip,
+  Box, Typography, Button, Alert, Stack, IconButton, Tooltip,
 } from "@mui/material";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import ContentCopyIcon from "@mui/icons-material/ContentCopy";
-import HistoryIcon from "@mui/icons-material/History";
+import { motion } from "framer-motion";
 import type { DiagnoseResult } from "../utils/api";
 import ScoreCard from "../components/ScoreCard";
+import DimensionBars from "../components/DimensionBars";
 import RadarChart from "../components/RadarChart";
+import BaselineComparison from "../components/BaselineComparison";
 import AgentDebate from "../components/AgentDebate";
 import SimulatedComments from "../components/SimulatedComments";
 import SuggestionList from "../components/SuggestionList";
 import DiagnoseCard from "../components/DiagnoseCard";
 import { showToast } from "../components/Toast";
 
-const DISCLAIMER = "本报告由 AI 多 Agent 协作生成，诊断结果仅供参考，不构成任何运营承诺。";
+const card = {
+  bgcolor: "#fff",
+  border: "1px solid #f0f0f0",
+  borderRadius: "16px",
+  boxShadow: "0 1px 4px rgba(0,0,0,0.03)",
+  p: { xs: 2.5, md: 3 },
+};
 
-/**
- * 诊断报告页
- */
+function saveToHistory(title: string, score: number, grade: string, category: string) {
+  try {
+    const raw = localStorage.getItem("noterx_history");
+    const history = raw ? JSON.parse(raw) : [];
+    history.unshift({ title, score: Math.round(score), grade, category, date: Date.now() });
+    localStorage.setItem("noterx_history", JSON.stringify(history.slice(0, 10)));
+  } catch { /* ignore */ }
+}
+
 export default function Report() {
   const location = useLocation();
   const navigate = useNavigate();
   const state = location.state as {
     report: DiagnoseResult;
-    params: { title: string; category: string };
+    params: { title: string; category: string; content?: string; tags?: string };
     isFallback?: boolean;
   } | null;
 
+  useEffect(() => {
+    if (state && !state.isFallback) {
+      saveToHistory(state.params.title, state.report.overall_score, state.report.grade, state.params.category);
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   if (!state) {
     return (
-      <Box sx={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center" }}>
+      <Box sx={{ minHeight: "100vh", bgcolor: "#fafafa", display: "flex", alignItems: "center", justifyContent: "center" }}>
         <Box sx={{ textAlign: "center" }}>
-          <Typography color="text.secondary" gutterBottom>暂无诊断数据</Typography>
-          <Button variant="text" onClick={() => navigate("/")}>返回首页</Button>
+          <Typography sx={{ color: "#999", fontSize: 14, mb: 2 }}>暂无诊断数据</Typography>
+          <Button onClick={() => navigate("/")} sx={{ color: "#ff2442", fontWeight: 600 }}>返回首页</Button>
         </Box>
       </Box>
     );
   }
 
   const { report, params, isFallback } = state;
+  const userTags = typeof params.tags === "string"
+    ? params.tags.split(",").filter(Boolean)
+    : Array.isArray(params.tags) ? params.tags : [];
 
   const copyText = (text: string, label: string) => {
     navigator.clipboard.writeText(text);
@@ -47,166 +71,138 @@ export default function Report() {
   };
 
   return (
-    <Box
-      sx={{
-        minHeight: "100vh",
-        background: "linear-gradient(160deg, #ecfdf5 0%, #ffffff 50%, #f0fdfa 100%)",
-        pb: 10,
-      }}
-    >
-      {/* 顶栏 */}
-      <Box
-        sx={{
-          position: "sticky",
-          top: 0,
-          zIndex: 10,
-          bgcolor: "rgba(255,255,255,0.85)",
-          backdropFilter: "blur(12px)",
-          borderBottom: "1px solid",
-          borderColor: "divider",
-        }}
-      >
-        <Box sx={{ maxWidth: 720, mx: "auto", px: 2, py: 1.5, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-          <Button startIcon={<ArrowBackIcon />} onClick={() => navigate("/")} size="small" color="inherit">
+    <Box sx={{ minHeight: "100vh", bgcolor: "#fafafa", pb: 6 }}>
+      {/* Top bar */}
+      <Box sx={{ position: "sticky", top: 0, zIndex: 50, bgcolor: "#fff", borderBottom: "1px solid #f0f0f0" }}>
+        <Box sx={{ maxWidth: 960, mx: "auto", px: { xs: 2, md: 3 }, py: 1.25, display: "flex", alignItems: "center" }}>
+          <Button
+            startIcon={<ArrowBackIcon sx={{ fontSize: 18 }} />}
+            onClick={() => navigate("/")}
+            sx={{ color: "#999", fontWeight: 500, fontSize: 13, "&:hover": { color: "#262626" } }}
+          >
             重新诊断
           </Button>
-          <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
-            <Typography sx={{ fontSize: 20 }}>💊</Typography>
-            <Typography sx={{ fontWeight: 700 }} color="primary">诊断报告</Typography>
-          </Box>
-          <Button startIcon={<HistoryIcon />} onClick={() => navigate("/history")} size="small" color="inherit">
-            历史
-          </Button>
+          <Box sx={{ flex: 1 }} />
+          <Typography sx={{ fontWeight: 600, fontSize: 15, color: "#262626" }}>诊断报告</Typography>
+          <Box sx={{ flex: 1 }} />
+          <Box sx={{ width: 100 }} />
         </Box>
       </Box>
 
       {isFallback && (
-        <Box sx={{ maxWidth: 720, mx: "auto", px: 2, mt: 2 }}>
-          <Alert severity="warning">当前展示的是演示数据（后端不可用）</Alert>
+        <Box sx={{ maxWidth: 960, mx: "auto", px: { xs: 2, md: 3 }, mt: 2 }}>
+          <Alert severity="warning" sx={{ borderRadius: "12px" }}>当前展示的是演示数据</Alert>
         </Box>
       )}
 
-      <Box sx={{ maxWidth: 720, mx: "auto", px: 2, mt: 3 }}>
-        <Stack spacing={3}>
-          {/* 评分卡 */}
-          <ScoreCard score={report.overall_score} grade={report.grade} title={params.title} />
+      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.35 }}>
+        <Box sx={{ maxWidth: 960, mx: "auto", px: { xs: 2, md: 3 }, mt: 2.5 }}>
 
-          {/* 雷达图 */}
-          <Card>
-            <CardContent>
-              <Typography variant="h6" sx={{ fontWeight: 600 }} gutterBottom>
-                📊 五维诊断雷达图
-              </Typography>
+          {/* Row 1: Score + Dimension Bars + Radar — 3 columns on desktop */}
+          <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "1fr 1fr 1fr" }, gap: 2, mb: 2 }}>
+            <Box sx={card}>
+              <ScoreCard score={report.overall_score} grade={report.grade} title={params.title} />
+            </Box>
+            <Box sx={card}>
+              <Typography sx={{ fontWeight: 600, fontSize: 15, color: "#262626", mb: 2 }}>维度评分</Typography>
+              <DimensionBars data={report.radar_data} />
+            </Box>
+            <Box sx={card}>
+              <Typography sx={{ fontWeight: 600, fontSize: 15, color: "#262626", mb: 1 }}>五维雷达</Typography>
               <RadarChart data={report.radar_data} />
-            </CardContent>
-          </Card>
+            </Box>
+          </Box>
 
-          {/* 建议 + 优化 */}
-          <Card>
-            <CardContent>
-              <Typography variant="h6" sx={{ fontWeight: 600 }} gutterBottom>
-                💡 优化建议
+          {/* Row 2: Baseline comparison + Suggestions side by side */}
+          <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "2fr 3fr" }, gap: 2, mb: 2 }}>
+            <Box sx={card}>
+              <Typography sx={{ fontWeight: 600, fontSize: 15, color: "#262626", mb: 2 }}>基线对比</Typography>
+              <BaselineComparison category={params.category} userTitle={params.title} userTags={userTags} />
+              <Typography sx={{ fontSize: 11, color: "#ccc", mt: 2 }}>
+                与该垂类历史数据对比
               </Typography>
+            </Box>
+            <Box sx={card}>
+              <Typography sx={{ fontWeight: 600, fontSize: 15, color: "#262626", mb: 2 }}>优化建议</Typography>
               <SuggestionList suggestions={report.suggestions} />
+            </Box>
+          </Box>
 
-              {report.optimized_title && (
-                <Alert
-                  severity="success"
-                  icon={false}
-                  sx={{ mt: 2 }}
-                  action={
-                    <Tooltip title="复制标题">
-                      <IconButton size="small" onClick={() => copyText(report.optimized_title || "", "标题")}>
-                        <ContentCopyIcon fontSize="small" />
+          {/* Row 3: Optimized content */}
+          {(report.optimized_title || report.optimized_content || report.cover_direction) && (
+            <Box sx={{ ...card, mb: 2 }}>
+              <Typography sx={{ fontWeight: 600, fontSize: 15, color: "#262626", mb: 2 }}>AI 优化方案</Typography>
+              <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "1fr 1fr" }, gap: 1.5 }}>
+                {report.optimized_title && (
+                  <Box sx={{ p: 2, borderRadius: "12px", bgcolor: "#fafafa", border: "1px solid #f0f0f0", display: "flex", justifyContent: "space-between", gap: 1 }}>
+                    <Box sx={{ minWidth: 0 }}>
+                      <Typography sx={{ fontSize: 12, fontWeight: 600, color: "#ff2442", mb: 0.5 }}>建议标题</Typography>
+                      <Typography sx={{ fontSize: 14, color: "#262626", lineHeight: 1.6 }}>{report.optimized_title}</Typography>
+                    </Box>
+                    <Tooltip title="复制">
+                      <IconButton size="small" onClick={() => copyText(report.optimized_title || "", "标题")} sx={{ color: "#ccc", flexShrink: 0 }}>
+                        <ContentCopyIcon sx={{ fontSize: 15 }} />
                       </IconButton>
                     </Tooltip>
-                  }
-                >
-                  <Typography variant="subtitle2">AI 建议标题：</Typography>
-                  <Typography variant="body2">「{report.optimized_title}」</Typography>
-                </Alert>
-              )}
-
-              {report.optimized_content && (
-                <Alert
-                  severity="info"
-                  icon={false}
-                  sx={{ mt: 1.5 }}
-                  action={
-                    <Tooltip title="复制正文">
-                      <IconButton size="small" onClick={() => copyText(report.optimized_content || "", "正文")}>
-                        <ContentCopyIcon fontSize="small" />
+                  </Box>
+                )}
+                {report.optimized_content && (
+                  <Box sx={{ p: 2, borderRadius: "12px", bgcolor: "#fafafa", border: "1px solid #f0f0f0", display: "flex", justifyContent: "space-between", gap: 1 }}>
+                    <Box sx={{ minWidth: 0 }}>
+                      <Typography sx={{ fontSize: 12, fontWeight: 600, color: "#2563eb", mb: 0.5 }}>优化正文</Typography>
+                      <Typography sx={{ fontSize: 13, color: "#505050", whiteSpace: "pre-wrap", lineHeight: 1.7 }}>{report.optimized_content}</Typography>
+                    </Box>
+                    <Tooltip title="复制">
+                      <IconButton size="small" onClick={() => copyText(report.optimized_content || "", "正文")} sx={{ color: "#ccc", flexShrink: 0 }}>
+                        <ContentCopyIcon sx={{ fontSize: 15 }} />
                       </IconButton>
                     </Tooltip>
-                  }
-                >
-                  <Typography variant="subtitle2">AI 优化正文：</Typography>
-                  <Typography variant="body2" sx={{ whiteSpace: "pre-wrap", mt: 0.5 }}>
-                    {report.optimized_content}
-                  </Typography>
-                </Alert>
-              )}
-
+                  </Box>
+                )}
+              </Box>
               {report.cover_direction && (
-                <Box sx={{ mt: 2, p: 2, bgcolor: "#faf5ff", borderRadius: 2 }}>
-                  <Typography variant="subtitle2" color="secondary" gutterBottom>
-                    🎨 封面方向建议
-                  </Typography>
+                <Box sx={{ mt: 1.5, p: 2, borderRadius: "12px", bgcolor: "#fafafa", border: "1px solid #f0f0f0" }}>
+                  <Typography sx={{ fontSize: 12, fontWeight: 600, color: "#999", mb: 1 }}>封面方向</Typography>
                   <Stack spacing={0.5}>
-                    {report.cover_direction.layout && (
-                      <Typography variant="body2">构图：{report.cover_direction.layout}</Typography>
-                    )}
-                    {report.cover_direction.color_scheme && (
-                      <Typography variant="body2">配色：{report.cover_direction.color_scheme}</Typography>
-                    )}
-                    {report.cover_direction.text_style && (
-                      <Typography variant="body2">文字：{report.cover_direction.text_style}</Typography>
-                    )}
-                    {report.cover_direction.tips?.length > 0 &&
-                      report.cover_direction.tips.map((tip: string, i: number) => (
-                        <Typography key={i} variant="body2" sx={{ display: "flex", gap: 0.5, alignItems: "flex-start" }}>
-                          <span style={{ color: "#8b5cf6" }}>✦</span> {tip}
-                        </Typography>
-                      ))}
+                    {report.cover_direction.layout && <Typography sx={{ fontSize: 13, color: "#505050" }}><strong>构图：</strong>{report.cover_direction.layout}</Typography>}
+                    {report.cover_direction.color_scheme && <Typography sx={{ fontSize: 13, color: "#505050" }}><strong>配色：</strong>{report.cover_direction.color_scheme}</Typography>}
+                    {report.cover_direction.text_style && <Typography sx={{ fontSize: 13, color: "#505050" }}><strong>文字：</strong>{report.cover_direction.text_style}</Typography>}
+                    {report.cover_direction.tips?.map((tip: string, i: number) => (
+                      <Typography key={i} sx={{ fontSize: 13, color: "#505050" }}>· {tip}</Typography>
+                    ))}
                   </Stack>
                 </Box>
               )}
-            </CardContent>
-          </Card>
+            </Box>
+          )}
 
-          {/* Agent 辩论 */}
-          <Card>
-            <CardContent>
-              <Typography variant="h6" sx={{ fontWeight: 600 }} gutterBottom>
-                🤖 多Agent诊断详情
-              </Typography>
-              <AgentDebate
-                opinions={report.agent_opinions}
-                summary={report.debate_summary}
-                timeline={report.debate_timeline}
+          {/* Row 4: Agent debate + Comments */}
+          <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "3fr 2fr" }, gap: 2, mb: 2 }}>
+            <Box sx={card}>
+              <Typography sx={{ fontWeight: 600, fontSize: 15, color: "#262626", mb: 2 }}>Agent 诊断详情</Typography>
+              <AgentDebate opinions={report.agent_opinions} summary={report.debate_summary} timeline={report.debate_timeline} />
+            </Box>
+            <Box sx={card}>
+              <Typography sx={{ fontWeight: 600, fontSize: 15, color: "#262626", mb: 2 }}>模拟评论区</Typography>
+              <SimulatedComments
+                comments={report.simulated_comments}
+                noteTitle={params.title}
+                noteContent={params.content || ""}
+                noteCategory={params.category}
               />
-            </CardContent>
-          </Card>
+            </Box>
+          </Box>
 
-          {/* 模拟评论 */}
-          <Card>
-            <CardContent>
-              <Typography variant="h6" sx={{ fontWeight: 600 }} gutterBottom>
-                💬 AI模拟评论区
-              </Typography>
-              <SimulatedComments comments={report.simulated_comments} />
-            </CardContent>
-          </Card>
+          {/* Row 5: Export */}
+          <Box sx={card}>
+            <DiagnoseCard report={report} title={params.title} />
+          </Box>
 
-          {/* 导出 */}
-          <DiagnoseCard report={report} title={params.title} />
-
-          {/* 免责 */}
-          <Typography component="p" variant="caption" color="text.disabled" sx={{ textAlign: "center", pt: 2, pb: 4 }}>
-            {DISCLAIMER}
+          <Typography sx={{ textAlign: "center", fontSize: 12, color: "#ccc", mt: 3 }}>
+            本报告由 AI 多 Agent 协作生成，仅供参考
           </Typography>
-        </Stack>
-      </Box>
+        </Box>
+      </motion.div>
     </Box>
   );
 }
