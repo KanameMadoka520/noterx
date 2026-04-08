@@ -2,11 +2,50 @@
 NoteRx 后端入口
 """
 import logging
+import os
+import sqlite3
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 
 from app.api.routes import router as api_router
+
+FRONTEND_DIST = os.path.join(os.path.dirname(__file__), "..", "..", "frontend", "dist")
+
+DB_PATH = os.path.join(os.path.dirname(__file__), "..", "data", "baseline.db")
+
+
+def _ensure_history_table():
+    """启动时自动创建 diagnosis_history 表（如不存在）"""
+    os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
+    conn = sqlite3.connect(DB_PATH)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS diagnosis_history (
+            id TEXT PRIMARY KEY,
+            title TEXT NOT NULL,
+            category TEXT NOT NULL,
+            overall_score REAL,
+            grade TEXT,
+            report_json TEXT NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    conn.execute("""
+        CREATE INDEX IF NOT EXISTS idx_history_created
+        ON diagnosis_history(created_at DESC)
+    """)
+    conn.commit()
+    conn.close()
+
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    """应用生命周期：启动时自动建表"""
+    _ensure_history_table()
+    yield
 
 logging.basicConfig(
     level=logging.INFO,
@@ -17,6 +56,7 @@ app = FastAPI(
     title="NoteRx API",
     description="AI驱动的小红书笔记诊断平台",
     version="0.2.0",
+    lifespan=lifespan,
 )
 
 app.add_middleware(
@@ -29,11 +69,32 @@ app.add_middleware(
 
 app.include_router(api_router, prefix="/api")
 
+# Serve frontend static files if built
+if os.path.isdir(FRONTEND_DIST):
+    from starlette.middleware.base import BaseHTTPMiddleware
+    from starlette.responses import Response as StarletteResponse
 
-@app.get("/")
-async def root():
-    """健康检查"""
-    return {"status": "ok", "service": "NoteRx API"}
+    class SPAMiddleware(BaseHTTPMiddleware):
+        """Serve SPA for non-API, non-static routes"""
+        async def dispatch(self, request, call_next):
+            response = await call_next(request)
+            path = request.url.path
+            if (response.status_code == 404
+                    and not path.startswith("/api")
+                    and not path.startswith("/assets")):
+                return FileResponse(os.path.join(FRONTEND_DIST, "index.html"))
+            return response
+
+    app.mount("/assets", StaticFiles(directory=os.path.join(FRONTEND_DIST, "assets")), name="static")
+    app.add_middleware(SPAMiddleware)
+
+    @app.get("/")
+    async def serve_index():
+        return FileResponse(os.path.join(FRONTEND_DIST, "index.html"))
+else:
+    @app.get("/")
+    async def root():
+        return {"status": "ok", "service": "NoteRx API", "hint": "Run 'cd frontend && npm run build' to enable SPA serving"}
 
 
 @app.get("/api/health")

@@ -8,6 +8,7 @@ import {
 import DescriptionOutlined from "@mui/icons-material/DescriptionOutlined";
 import CameraAltOutlined from "@mui/icons-material/CameraAltOutlined";
 import LinkIcon from "@mui/icons-material/Link";
+import HistoryIcon from "@mui/icons-material/History";
 import CategoryPicker from "../components/CategoryPicker";
 import UploadZone from "../components/UploadZone";
 import { parseLink } from "../utils/api";

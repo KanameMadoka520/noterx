@@ -3,6 +3,8 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { Box, Typography } from "@mui/material";
 import { diagnoseNote } from "../utils/api";
+import type { DiagnoseResult } from "../utils/api";
+import { saveHistory } from "../utils/api";
 import { FALLBACK_REPORT } from "../utils/fallback";
 
 const STEPS = [
@@ -41,6 +43,11 @@ export default function Diagnosing() {
           coverImage: params.coverFile ?? undefined,
         });
         resultRef.current = { report: result, isFallback: false };
+        saveHistory({
+          title: params.title,
+          category: params.category,
+          report: result as DiagnoseResult,
+        }).catch((e) => console.warn("保存历史记录失败", e));
       } catch (err) {
         console.warn("API 不可用，使用 fallback", err);
         resultRef.current = { report: FALLBACK_REPORT, isFallback: true };

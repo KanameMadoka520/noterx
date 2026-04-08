@@ -6,6 +6,7 @@ import { pageTransition } from "./utils/motion";
 import Home from "./pages/Home";
 import Diagnosing from "./pages/Diagnosing";
 import Report from "./pages/Report";
+import History from "./pages/History";
 import ToastContainer from "./components/Toast";
 import ErrorBoundary from "./components/ErrorBoundary";
 import "./index.css";
@@ -59,6 +60,20 @@ function AnimatedRoutes() {
               style={{ minHeight: "100vh" }}
             >
               <Report />
+            </motion.div>
+          }
+        />
+        <Route
+          path="/history"
+          element={
+            <motion.div
+              variants={pageTransition}
+              initial="initial"
+              animate="animate"
+              exit="exit"
+              style={{ minHeight: "100vh" }}
+            >
+              <History />
             </motion.div>
           }
         />
