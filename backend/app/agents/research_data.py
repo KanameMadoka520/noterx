@@ -8,6 +8,66 @@ import re
 from typing import Optional
 
 # ═══════════════════════════════════════════════════════════════
+# 真实爆款样本（从 874 条数据中提取，用于 few-shot 参考）
+# ═══════════════════════════════════════════════════════════════
+
+VIRAL_TITLES: dict[str, list[str]] = {
+    "food": [
+        "有幸在亲戚家吃过一回，被惊艳到了！！",
+        "我妈做的这个炸酱面！！一口香飞了！！！",
+        "巨巨巨…巨好吃，求你们去做！！附做法～",
+    ],
+    "fashion": [
+        "11位女演员的\"一镜到底\"",
+        "和miumiu女孩的brunch date第二集",
+        "巴黎街拍｜普通女孩穿搭",
+    ],
+    "tech": [
+        "一篇读懂一加 15T！",
+        "第一次看广告看得意犹未尽",
+        "我的2025年度生产力工具杠杆力拉满！",
+    ],
+    "travel": [
+        "我很少用震撼形容一个地方",
+        "锐评国内旅游体验",
+        "\"再听到她的消息 是她又去了更远的地方\"",
+    ],
+    "lifestyle": [
+        "k的改写是我学生时代的第一次觉醒",
+        "老师和母父没教，但很重要的性知识2.0！",
+        "最大骗局？\"数学天才\"先被捧上天，再狠狠摔碎",
+    ],
+}
+
+REAL_COMMENTS: dict[str, list[str]] = {
+    "food": [
+        "太好看了吧！求食谱🔗",
+        "做了！！真的绝了！！不过我放了双倍辣椒哈哈",
+        "看饿了…收藏=学会（大概",
+    ],
+    "fashion": [
+        "我也希望有一些买漂亮衣服的钱 一些穿漂亮衣服的场合",
+        "封你为新一代的电梯战神",
+        "姐妹身高体重多少呀？想参考一下",
+    ],
+    "tech": [
+        "app store模式，掌握分发渠道，你不得不服",
+        "苹果想空手套白狼啊",
+        "所以到底值不值得买？说重点！",
+    ],
+    "travel": [
+        "收藏了！请问人均花费多少？",
+        "天啊这也太美了 已加入心愿单",
+        "求详细攻略！交通住宿怎么安排的",
+    ],
+    "lifestyle": [
+        "我似乎能get到博主的意思，因为我也在很长的时间里都感觉人生是一个轨道",
+        "白磷型人格，有一种恍然小悟的感觉",
+        "你说得比较可爱，其他评论mean一点哈哈哈哈",
+    ],
+}
+
+# ═══════════════════════════════════════════════════════════════
 # Model A 品类评分参数（从真实数据训练得出）
 # ═══════════════════════════════════════════════════════════════
 
@@ -187,15 +247,19 @@ def build_data_prompt_for_agent(agent_type: str, category: str) -> str:
     bl = p["baseline"]
     cn = CATEGORY_CN.get(category, category)
 
+    viral = VIRAL_TITLES.get(category, VIRAL_TITLES.get("lifestyle", []))
+    comments = REAL_COMMENTS.get(category, REAL_COMMENTS.get("lifestyle", []))
+
     if agent_type == "content":
+        viral_str = " / ".join(f'"{t}"' for t in viral[:3])
         return (
             f"\n\n## 数据研究基准（{cn}品类，基于{bl['sample_size']}条真实数据）\n"
             f"- 标题最优长度：{p['title_length']['min']}-{p['title_length']['max']}字（爆款平均{p['title_length']['viral_avg']}字）\n"
             f"- 正文最优长度：{p['content_length']['min']}-{p['content_length']['max']}字\n"
             f"- 标题质量权重：{w['title_quality']:.1%}（{'该品类最重要的维度' if w['title_quality'] > 0.4 else '重要维度'}）\n"
-            f"- 内容质量权重：{w['content_quality']:.1%}\n"
             f"- 基线互动量：平均{bl['avg_engagement']:,}，中位数{bl['median']:,}，爆款线{bl['viral_threshold']:,}\n"
-            f"请严格依据以上参数给出量化诊断，指出具体差距。"
+            f"\n**该品类真实爆款标题参考**（请模仿这些标题的语气和句式改写用户标题）：\n{viral_str}\n"
+            f"请严格依据以上参数给出量化诊断，优化标题时必须模仿真实爆款的语气。"
         )
     elif agent_type == "visual":
         return (
@@ -217,18 +281,24 @@ def build_data_prompt_for_agent(agent_type: str, category: str) -> str:
             f"请基于以上数据给出增长策略。"
         )
     elif agent_type == "user_sim":
+        comments_str = "\n".join(f'  - "{c}"' for c in comments[:3])
         return (
-            f"\n\n## 用户画像数据（{cn}品类）\n"
-            f"- 基于2500条真实评论的用户类型分布：种草型/经验型/调侃型/质疑型/求购型/路人型\n"
-            f"- 模拟评论时请参考真实分布，{'穿搭评论区63%正面情绪，种草型占25%' if category == 'fashion' else '科技评论区经验型占37%，质疑型占17%' if category == 'tech' else '生活评论区调侃型占30%，共鸣驱动高互动'}\n"
-            f"请生成符合真实品类用户画像的模拟评论。"
+            f"\n\n## 用户画像数据（{cn}品类，基于2500条真实评论）\n"
+            f"- 用户类型分布：种草型/经验型/调侃型/质疑型/求购型/路人型\n"
+            f"- {'穿搭评论区63%正面情绪，种草型占25%' if category == 'fashion' else '科技评论区经验型占37%，质疑型占17%' if category == 'tech' else '生活评论区调侃型占30%，共鸣驱动高互动'}\n"
+            f"\n**该品类真实高赞评论参考**（请模仿这些评论的语气和风格）：\n{comments_str}\n"
+            f"生成评论时必须像真实小红书用户——用口语、带表情符号、有的很短有的很长、有人抬杠有人种草。禁止AI味。"
         )
     elif agent_type == "judge":
         w_str = "、".join(f"{k}({v:.1%})" for k, v in sorted(w.items(), key=lambda x: -x[1]))
+        viral_str = " / ".join(f'"{t}"' for t in viral[:3])
         return (
             f"\n\n## 数据驱动评分标准（{cn}品类，{bl['sample_size']}条数据训练）\n"
             f"- 评分权重优先级：{w_str}\n"
             f"- 基线对比：平均互动{bl['avg_engagement']:,}，中位数{bl['median']:,}，爆款线{bl['viral_threshold']:,}\n"
+            f"\n**该品类真实爆款标题参考**（改写标题时请模仿这些语气）：\n{viral_str}\n"
+            f"- optimized_title 必须像真实小红书爆款——口语化、有情绪、有悬念，禁止学术化或AI味\n"
+            f"- optimized_content 必须像真实小红书正文——短段落、emoji分隔、结尾互动引导，禁止长段落和书面语\n"
             f"- 请严格按权重加权计算总分，并与基线对标。"
         )
     return ""
