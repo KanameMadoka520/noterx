@@ -369,6 +369,7 @@ export default function Home() {
   };
 
   const isReady = files.length > 0 && allRecognitionDone;
+  const [leaving, setLeaving] = useState(false);
 
   return (
     <Box sx={{
@@ -428,7 +429,7 @@ export default function Home() {
 
         <Box sx={{ display: "flex", alignItems: "center", gap: { xs: 0.5, md: 1 } }}>
           <Button
-            onClick={() => { window.location.href = "/"; }}
+            onClick={() => { setLeaving(true); setTimeout(() => { window.location.href = "/"; }, 450); }}
             size="small"
             sx={{
               color: "#bbb", fontSize: 12, fontWeight: 500, minWidth: "auto",
@@ -788,6 +789,34 @@ export default function Home() {
           </Typography>
         )}
       </Box>
+
+      {/* ═══════════ Page transition overlay ═══════════ */}
+      <AnimatePresence>
+        {leaving && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.4, ease: [0.4, 0, 0.2, 1] }}
+            style={{
+              position: "fixed", inset: 0, zIndex: 100,
+              background: "linear-gradient(135deg, #ff3d5c, #e61e3d)",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              flexDirection: "column", gap: 8,
+            }}
+          >
+            <Box sx={{
+              width: 48, height: 48, borderRadius: "12px",
+              bgcolor: "rgba(255,255,255,0.2)",
+              display: "flex", alignItems: "center", justifyContent: "center",
+            }}>
+              <Typography sx={{ color: "#fff", fontSize: 20, fontWeight: 800 }}>Rx</Typography>
+            </Box>
+            <Typography sx={{ color: "rgba(255,255,255,0.9)", fontSize: 14, fontWeight: 600 }}>
+              薯医 NoteRx
+            </Typography>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </Box>
   );
 }
