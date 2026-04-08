@@ -2,13 +2,12 @@ import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  Box, Typography, TextField, Button, Stack, Chip,
-  CircularProgress, Alert, Paper, useTheme,
+  Box, Typography, TextField, Button, Chip,
+  CircularProgress, useTheme,
   useMediaQuery,
 } from "@mui/material";
 import HistoryOutlined from "@mui/icons-material/HistoryOutlined";
 import CheckCircleIcon from "@mui/icons-material/CheckCircle";
-import WarningAmberIcon from "@mui/icons-material/WarningAmber";
 import CategoryPicker from "../components/CategoryPicker";
 import UploadZone from "../components/UploadZone";
 import { quickRecognize } from "../utils/api";
@@ -369,10 +368,7 @@ export default function Home() {
     comments: "评论区",
   };
 
-  /* ── Derived states for UI ── */
-  const hasAnyResult = successResults.length > 0 || allFailed;
   const isReady = files.length > 0 && allRecognitionDone;
-  const showForm = files.length > 0;
 
   return (
     <Box sx={{
