@@ -94,6 +94,8 @@ export default function ScreenshotAnalysis() {
     }
   }, [scenario, extraText]);
 
+  const currentGuideIndex = ORDERED_SLOT_KEYS.findIndex((key) => !files[key]);
+
   /** 上传成功后自动滚动到下一步，降低操作中断感。 */
   useEffect(() => {
     if (!scenario || currentGuideIndex < 0) return;
@@ -157,7 +159,6 @@ export default function ScreenshotAnalysis() {
 
   const filledCount = Object.values(files).filter(Boolean).length;
   const canSubmit = filledCount >= 1 && !analyzing;
-  const currentGuideIndex = ORDERED_SLOT_KEYS.findIndex((key) => !files[key]);
   const visibleGuideCount = currentGuideIndex === -1 ? ORDERED_SLOT_KEYS.length : currentGuideIndex + 1;
   const nextSlotLabel = currentGuideIndex === -1
     ? ""
@@ -361,7 +362,7 @@ export default function ScreenshotAnalysis() {
               return (
                 <Box
                   key={slot.key}
-                  ref={(el) => { slotCardRefs.current[slot.key] = el; }}
+                  ref={(el: HTMLDivElement | null) => { slotCardRefs.current[slot.key] = el; }}
                   sx={{ p: 2.5, borderRadius: "16px", bgcolor: "#fff", border: "1px solid #f0f0f0" }}
                 >
                   <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, mb: 1.5 }}>
