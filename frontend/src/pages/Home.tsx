@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+﻿import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { AnimatePresence, motion } from "framer-motion";
 import {
@@ -20,54 +20,25 @@ import CameraAltOutlined from "@mui/icons-material/CameraAltOutlined";
 import LinkIcon from "@mui/icons-material/Link";
 import HistoryIcon from "@mui/icons-material/History";
 import ArrowForwardIcon from "@mui/icons-material/ArrowForward";
-import CategoryPicker from "../components/CategoryPicker";
-import UploadZone from "../components/UploadZone";
+import UploadZone, { type UploadMediaState } from "../components/UploadZone";
 import { parseLink } from "../utils/api";
 
 type InputMode = "text" | "screenshot" | "link";
 
 const tabContentMotion = {
-  initial: { opacity: 0, y: 8 },
-  animate: { opacity: 1, y: 0, transition: { duration: 0.25, ease: [0.4, 0, 0.2, 1] } },
-  exit: { opacity: 0, y: -6, transition: { duration: 0.15 } },
+  initial: { opacity: 0, y: 6 },
+  animate: { opacity: 1, y: 0, transition: { duration: 0.2 } },
+  exit: { opacity: 0, y: -6, transition: { duration: 0.12 } },
 };
 
-const SAMPLES = [
-  {
-    title: "5步搞定！零失败的懒人蛋炒饭",
-    content: "今天教大家做超简单的蛋炒饭，只需要鸡蛋、隔夜饭和葱花。",
-    tags: "美食分享,蛋炒饭,快手菜",
-    category: "food",
-  },
-  {
-    title: "这件外套也太好看了吧",
-    content: "今年秋冬必入的一件外套！面料超舒服，版型也很好。",
-    tags: "穿搭,秋冬穿搭,外套推荐",
-    category: "fashion",
-  },
-  {
-    title: "用了3个月的平板终于来测评了",
-    content: "作为一个重度用户，这款平板的使用体验如何？今天给大家详细聊聊。",
-    tags: "科技,平板测评,数码好物",
-    category: "tech",
-  },
-];
-
-interface HistoryItem {
-  title: string;
-  score: number;
-  grade: string;
-  category: string;
-  date: number;
-}
-
-const GRADE_COLOR: Record<string, string> = {
-  S: "#10b981",
-  A: "#3b82f6",
-  B: "#8b5cf6",
-  C: "#f59e0b",
-  D: "#ef4444",
-};
+const CATEGORIES = [
+  { key: "food", label: "美食" },
+  { key: "fashion", label: "穿搭" },
+  { key: "tech", label: "科技" },
+  { key: "travel", label: "旅行" },
+  { key: "beauty", label: "美妆" },
+  { key: "fitness", label: "健身" },
+] as const;
 
 const CATEGORY_LABEL: Record<string, string> = {
   food: "美食",
@@ -78,6 +49,35 @@ const CATEGORY_LABEL: Record<string, string> = {
   fitness: "健身",
 };
 
+const SAMPLES = [
+  {
+    title: "5分钟懒人蛋炒饭",
+    content: "超简单稳定配方：鸡蛋 + 米饭 + 葱花，忙碌工作日也能快速完成。",
+    tags: "美食,家常菜,快手",
+    category: "food",
+  },
+  {
+    title: "秋季外套真实测评",
+    content: "连续穿两周后，从面料、版型和性价比三个维度做总结。",
+    tags: "穿搭,外套,秋冬",
+    category: "fashion",
+  },
+  {
+    title: "平板3个月使用报告",
+    content: "记录日常效率场景和娱乐场景的真实体验。",
+    tags: "数码,平板,测评",
+    category: "tech",
+  },
+] as const;
+
+interface HistoryItem {
+  title: string;
+  score: number;
+  grade: string;
+  category: string;
+  date: number;
+}
+
 export default function Home() {
   const navigate = useNavigate();
 
@@ -86,7 +86,7 @@ export default function Home() {
   const [content, setContent] = useState("");
   const [tags, setTags] = useState("");
   const [category, setCategory] = useState("food");
-  const [coverFile, setCoverFile] = useState<File | null>(null);
+  const [uploadMedia, setUploadMedia] = useState<UploadMediaState>({ images: [], video: null });
   const [linkUrl, setLinkUrl] = useState("");
   const [linkLoading, setLinkLoading] = useState(false);
   const [linkError, setLinkError] = useState("");
@@ -95,41 +95,59 @@ export default function Home() {
   useEffect(() => {
     try {
       const raw = localStorage.getItem("noterx_history");
-      if (raw) {
-        setHistory(JSON.parse(raw));
-      }
+      if (raw) setHistory(JSON.parse(raw));
     } catch {
       setHistory([]);
     }
   }, []);
 
   useEffect(() => {
-    const handlePaste = (e: ClipboardEvent) => {
-      const items = e.clipboardData?.items;
+    const handlePaste = (event: ClipboardEvent) => {
+      const items = event.clipboardData?.items;
       if (!items) return;
       for (const item of items) {
         if (!item.type.startsWith("image/")) continue;
         const file = item.getAsFile();
         if (file) {
-          setCoverFile(file);
+          setUploadMedia((prev) => ({
+            images: [...prev.images, file].slice(0, 9),
+            video: null,
+          }));
           setMode("screenshot");
         }
         break;
       }
     };
+
     window.addEventListener("paste", handlePaste);
     return () => window.removeEventListener("paste", handlePaste);
   }, []);
 
-  const canSubmit = mode === "screenshot" ? coverFile !== null : title.trim().length > 0;
+  const canSubmit =
+    mode === "screenshot"
+      ? uploadMedia.images.length > 0 || uploadMedia.video !== null
+      : title.trim().length > 0;
+
+  const submitText = useMemo(() => {
+    if (!canSubmit) return "开始诊断";
+    return mode === "screenshot" ? "开始媒体诊断" : "开始诊断";
+  }, [canSubmit, mode]);
 
   const handleSubmit = () => {
     navigate("/diagnosing", {
-      state: { title, content, tags, category, coverFile },
+      state: {
+        title,
+        content,
+        tags,
+        category,
+        coverFile: uploadMedia.images[0] ?? null,
+        coverImages: uploadMedia.images,
+        videoFile: uploadMedia.video,
+      },
     });
   };
 
-  const fillSample = (sample: (typeof SAMPLES)[0]) => {
+  const fillSample = (sample: (typeof SAMPLES)[number]) => {
     setTitle(sample.title);
     setContent(sample.content);
     setTags(sample.tags);
@@ -144,7 +162,7 @@ export default function Home() {
     try {
       const result = await parseLink(linkUrl);
       if (!result.success) {
-        setLinkError(result.error || "解析失败");
+        setLinkError(result.error || "链接解析失败。请重试。");
       } else {
         setTitle(result.title);
         setContent(result.content);
@@ -152,7 +170,7 @@ export default function Home() {
         setMode("text");
       }
     } catch {
-      setLinkError("网络错误，请稍后重试");
+      setLinkError("网络异常，请稍后重试。");
     } finally {
       setLinkLoading(false);
     }
@@ -162,200 +180,131 @@ export default function Home() {
 
   return (
     <Box
-      component={motion.div}
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      transition={{ duration: 0.4 }}
       sx={{
         minHeight: "100vh",
-        background: "linear-gradient(180deg, #fafafa 0%, #f1f5f9 100%)",
-        px: { xs: 2, sm: 3, md: 4 },
-        py: { xs: 3, md: 4 },
+        bgcolor: "#f7f7f8",
+        px: 2,
+        py: { xs: 2.5, sm: 4 },
       }}
     >
-      <Box sx={{ maxWidth: 1200, mx: "auto" }}>
-        {/* Header */}
-        <Box
-          sx={{
-            mb: 4,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            gap: 2,
-            flexWrap: "wrap",
-          }}
-        >
-          <Box>
-            <Typography
-              sx={{
-                fontSize: { xs: "1.75rem", md: "2rem" },
-                fontWeight: 700,
-                letterSpacing: "-0.02em",
-                background: "linear-gradient(135deg, #7c3aed 0%, #8b5cf6 100%)",
-                WebkitBackgroundClip: "text",
-                WebkitTextFillColor: "transparent",
-              }}
-            >
-              薯医 NoteRx
-            </Typography>
-            <Typography
-              sx={{
-                mt: 0.5,
-                fontSize: "0.9375rem",
-                color: "text.secondary",
-                fontWeight: 400,
-              }}
-            >
-              AI 驱动的小红书笔记诊断工作台
-            </Typography>
-          </Box>
+      <Box sx={{ maxWidth: 560, mx: "auto" }}>
+        <Box sx={{ display: "flex", justifyContent: "flex-end", mb: 2 }}>
           <Button
-            variant="outlined"
-            startIcon={<HistoryIcon sx={{ fontSize: 18 }} />}
+            variant="text"
+            startIcon={<HistoryIcon sx={{ fontSize: 15 }} />}
             onClick={() => navigate("/history")}
             sx={{
-              minWidth: 120,
-              borderColor: "rgba(15, 23, 42, 0.12)",
-              color: "text.secondary",
+              minHeight: 28,
+              px: 0.75,
+              color: "#9ca3af",
+              fontSize: "0.75rem",
               fontWeight: 500,
-              "&:hover": {
-                borderColor: "rgba(15, 23, 42, 0.2)",
-                backgroundColor: "rgba(15, 23, 42, 0.02)",
-              },
             }}
           >
             历史记录
           </Button>
         </Box>
 
-        {/* Main Grid */}
-        <Box
-          sx={{
-            display: "grid",
-            gridTemplateColumns: { xs: "1fr", lg: "1.5fr 1fr" },
-            gap: 3,
-            alignItems: "start",
-          }}
-        >
-          {/* Main Input Card */}
-          <Paper
-            elevation={0}
+        <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 2.25 }}>
+          <Box
             sx={{
-              p: { xs: 2.5, md: 3.5 },
-              borderRadius: 3,
-              border: "1px solid rgba(15, 23, 42, 0.08)",
-              boxShadow: "0 1px 3px rgba(15, 23, 42, 0.04), 0 4px 20px rgba(15, 23, 42, 0.04)",
+              width: 22,
+              height: 22,
+              borderRadius: 1,
+              bgcolor: "#ff2442",
+              color: "#fff",
+              fontSize: "0.72rem",
+              fontWeight: 700,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              flexShrink: 0,
             }}
           >
-            <Typography
-              variant="h6"
-              sx={{
+            薯
+          </Box>
+          <Box>
+            <Typography sx={{ fontSize: "0.96rem", fontWeight: 700, color: "#1f2937", lineHeight: 1.2 }}>
+              薯医 NoteRx
+            </Typography>
+            <Typography sx={{ fontSize: "0.69rem", color: "#9ca3af", mt: 0.25 }}>
+              AI 驱动的笔记诊断工具
+            </Typography>
+          </Box>
+        </Box>
+
+        <Paper
+          elevation={0}
+          sx={{
+            borderRadius: 2,
+            border: "1px solid #eceff3",
+            bgcolor: "#fff",
+            overflow: "hidden",
+          }}
+        >
+          <Tabs
+            value={tabIndex}
+            onChange={(_, value) => setMode(([
+              "text",
+              "screenshot",
+              "link",
+            ] as InputMode[])[value])}
+            variant="fullWidth"
+            sx={{
+              minHeight: 42,
+              borderBottom: "1px solid #f1f3f5",
+              "& .MuiTab-root": {
+                minHeight: 42,
+                fontSize: "0.77rem",
+                color: "#9ca3af",
+                fontWeight: 500,
+                textTransform: "none",
+              },
+              "& .MuiTab-root.Mui-selected": {
+                color: "#1f2937",
                 fontWeight: 600,
-                fontSize: "1.125rem",
-                letterSpacing: "-0.01em",
-                mb: 0.5,
-              }}
-            >
-              新建诊断
-            </Typography>
-            <Typography
-              variant="body2"
-              sx={{
-                color: "text.secondary",
-                mb: 3,
-                fontSize: "0.875rem",
-              }}
-            >
-              选择输入方式，填写内容后开始诊断
-            </Typography>
+              },
+              "& .MuiTabs-indicator": {
+                height: 2,
+                borderRadius: "2px 2px 0 0",
+                bgcolor: "#ff2442",
+              },
+            }}
+          >
+            <Tab icon={<DescriptionOutlined sx={{ fontSize: 14 }} />} iconPosition="start" label="文字" />
+            <Tab icon={<CameraAltOutlined sx={{ fontSize: 14 }} />} iconPosition="start" label="媒体" />
+            <Tab icon={<LinkIcon sx={{ fontSize: 14 }} />} iconPosition="start" label="链接" />
+          </Tabs>
 
-            {/* Tabs */}
-            <Tabs
-              value={tabIndex}
-              onChange={(_, value) => setMode((["text", "screenshot", "link"] as InputMode[])[value])}
-              variant="fullWidth"
-              sx={{
-                borderBottom: "1px solid rgba(15, 23, 42, 0.08)",
-                mb: 3,
-                minHeight: 44,
-                "& .MuiTabs-flexContainer": {
-                  gap: 1,
-                },
-              }}
-            >
-              <Tab
-                icon={<DescriptionOutlined sx={{ fontSize: 18 }} />}
-                iconPosition="start"
-                label="文字"
-                sx={{ minHeight: 44, textTransform: "none" }}
-              />
-              <Tab
-                icon={<CameraAltOutlined sx={{ fontSize: 18 }} />}
-                iconPosition="start"
-                label="截图"
-                sx={{ minHeight: 44, textTransform: "none" }}
-              />
-              <Tab
-                icon={<LinkIcon sx={{ fontSize: 18 }} />}
-                iconPosition="start"
-                label="链接"
-                sx={{ minHeight: 44, textTransform: "none" }}
-              />
-            </Tabs>
-
-            {/* Tab Content */}
+          <Box sx={{ p: 1.5 }}>
             <AnimatePresence mode="wait">
               {mode === "text" && (
                 <motion.div key="text" {...tabContentMotion}>
-                  <Stack spacing={2.5}>
+                  <Stack spacing={1.2}>
                     <TextField
-                      label="笔记标题"
-                      required
-                      fullWidth
+                      size="small"
+                      label="笔记标题 *"
                       value={title}
-                      onChange={(e) => setTitle(e.target.value)}
-                      placeholder="输入你的笔记标题"
+                      onChange={(event) => setTitle(event.target.value)}
+                      placeholder="输入笔记标题"
                       slotProps={{ htmlInput: { maxLength: 100 } }}
                       helperText={`${title.length}/100`}
-                      sx={{
-                        "& .MuiInputLabel-root": {
-                          fontWeight: 500,
-                          color: "text.secondary",
-                        },
-                        "& .MuiFormHelperText-root": {
-                          fontSize: "0.75rem",
-                          color: "text.tertiary",
-                          ml: 0,
-                        },
-                      }}
                     />
                     <TextField
+                      size="small"
                       label="笔记正文"
-                      fullWidth
                       multiline
-                      minRows={5}
+                      minRows={4}
                       value={content}
-                      onChange={(e) => setContent(e.target.value)}
-                      placeholder="粘贴笔记正文（可选）"
-                      sx={{
-                        "& .MuiInputLabel-root": {
-                          fontWeight: 500,
-                          color: "text.secondary",
-                        },
-                      }}
+                      onChange={(event) => setContent(event.target.value)}
+                      placeholder="输入笔记正文（可选）"
                     />
                     <TextField
+                      size="small"
                       label="标签"
-                      fullWidth
                       value={tags}
-                      onChange={(e) => setTags(e.target.value)}
-                      placeholder="用逗号分隔，如：美食分享,减脂餐"
-                      sx={{
-                        "& .MuiInputLabel-root": {
-                          fontWeight: 500,
-                          color: "text.secondary",
-                        },
-                      }}
+                      onChange={(event) => setTags(event.target.value)}
+                      placeholder="用英文逗号分隔，如：穿搭,秋冬,通勤"
                     />
                   </Stack>
                 </motion.div>
@@ -363,20 +312,14 @@ export default function Home() {
 
               {mode === "screenshot" && (
                 <motion.div key="screenshot" {...tabContentMotion}>
-                  <Stack spacing={2.5}>
-                    <UploadZone onFileSelect={setCoverFile} />
+                  <Stack spacing={1.2}>
+                    <UploadZone value={uploadMedia} onChange={setUploadMedia} />
                     <TextField
-                      label="笔记标题（可选）"
-                      fullWidth
+                      size="small"
+                      label="标题（可选）"
                       value={title}
-                      onChange={(e) => setTitle(e.target.value)}
-                      placeholder="留空则由 AI 自动识别"
-                      sx={{
-                        "& .MuiInputLabel-root": {
-                          fontWeight: 500,
-                          color: "text.secondary",
-                        },
-                      }}
+                      onChange={(event) => setTitle(event.target.value)}
+                      placeholder="留空则尝试 OCR 自动识别"
                     />
                   </Stack>
                 </motion.div>
@@ -384,27 +327,22 @@ export default function Home() {
 
               {mode === "link" && (
                 <motion.div key="link" {...tabContentMotion}>
-                  <Stack spacing={2}>
-                    <Box sx={{ display: "flex", gap: 1.5 }}>
+                  <Stack spacing={1.2}>
+                    <Box sx={{ display: "flex", gap: 1 }}>
                       <TextField
                         fullWidth
-                        label="小红书笔记链接"
+                        size="small"
+                        label="笔记分享链接"
                         value={linkUrl}
-                        onChange={(e) => setLinkUrl(e.target.value)}
+                        onChange={(event) => setLinkUrl(event.target.value)}
                         placeholder="粘贴小红书分享链接"
                         slotProps={{
                           input: {
                             startAdornment: (
                               <InputAdornment position="start">
-                                <LinkIcon sx={{ color: "text.tertiary", fontSize: 18 }} />
+                                <LinkIcon sx={{ color: "#9ca3af", fontSize: 15 }} />
                               </InputAdornment>
                             ),
-                          },
-                        }}
-                        sx={{
-                          "& .MuiInputLabel-root": {
-                            fontWeight: 500,
-                            color: "text.secondary",
                           },
                         }}
                       />
@@ -412,283 +350,169 @@ export default function Home() {
                         variant="contained"
                         disabled={linkLoading || !linkUrl.trim()}
                         onClick={handleParseLink}
-                        sx={{
-                          minWidth: 88,
-                          flexShrink: 0,
-                          px: 3,
-                        }}
+                        sx={{ minWidth: 72, fontSize: "0.75rem" }}
                       >
-                        {linkLoading ? <CircularProgress size={18} color="inherit" /> : "解析"}
+                        {linkLoading ? <CircularProgress size={14} color="inherit" /> : "解析"}
                       </Button>
                     </Box>
-                    {linkError && (
-                      <Alert severity="error" sx={{ borderRadius: 2 }}>
-                        {linkError}
-                      </Alert>
-                    )}
-                    {title && (
-                      <Alert severity="success" sx={{ borderRadius: 2 }}>
-                        已解析：{title}
-                      </Alert>
-                    )}
+                    {linkError && <Alert severity="error">{linkError}</Alert>}
+                    {title && <Alert severity="success">已解析标题：{title}</Alert>}
                   </Stack>
                 </motion.div>
               )}
             </AnimatePresence>
 
-            <Divider sx={{ my: 3, borderColor: "rgba(15, 23, 42, 0.06)" }} />
+            <Divider sx={{ my: 1.5 }} />
 
-            {/* Category */}
-            <Typography
-              sx={{
-                fontSize: "0.8125rem",
-                fontWeight: 600,
-                color: "text.primary",
-                mb: 1.5,
-                letterSpacing: "-0.005em",
-              }}
-            >
+            <Typography sx={{ fontSize: "0.73rem", color: "#6b7280", fontWeight: 600, mb: 1 }}>
               选择垂类
             </Typography>
-            <CategoryPicker value={category} onChange={setCategory} />
-
-            {/* Submit Button */}
-            <Button
-              variant="contained"
-              fullWidth
-              size="large"
-              onClick={handleSubmit}
-              disabled={!canSubmit}
-              endIcon={<ArrowForwardIcon sx={{ fontSize: 18 }} />}
-              sx={{
-                mt: 3.5,
-                height: 48,
-                fontWeight: 600,
-                fontSize: "0.9375rem",
-                background: "linear-gradient(135deg, #7c3aed 0%, #8b5cf6 100%)",
-                boxShadow: "0 4px 14px rgba(124, 58, 237, 0.35)",
-                "&:hover": {
-                  background: "linear-gradient(135deg, #6d28d9 0%, #7c3aed 100%)",
-                  boxShadow: "0 6px 20px rgba(124, 58, 237, 0.45)",
-                  transform: "translateY(-1px)",
-                },
-                "&:disabled": {
-                  background: "rgba(15, 23, 42, 0.08)",
-                  color: "rgba(15, 23, 42, 0.3)",
-                  boxShadow: "none",
-                },
-                transition: "all 0.2s ease",
-              }}
-            >
-              开始诊断
-            </Button>
-          </Paper>
-
-          {/* Sidebar */}
-          <Stack spacing={3}>
-            {/* Quick Samples */}
-            <Paper
-              elevation={0}
-              sx={{
-                p: 2.5,
-                borderRadius: 3,
-                border: "1px solid rgba(15, 23, 42, 0.08)",
-                boxShadow: "0 1px 3px rgba(15, 23, 42, 0.04)",
-              }}
-            >
-              <Typography
-                sx={{
-                  fontWeight: 600,
-                  fontSize: "0.9375rem",
-                  mb: 2,
-                  letterSpacing: "-0.005em",
-                }}
-              >
-                快速体验
-              </Typography>
-              <Stack spacing={1.5}>
-                {SAMPLES.map((sample, index) => (
+            <Stack direction="row" spacing={0.75} useFlexGap flexWrap="wrap">
+              {CATEGORIES.map((item) => {
+                const active = category === item.key;
+                return (
                   <Box
-                    key={sample.title}
-                    component={motion.div}
-                    whileHover={{ x: 2, backgroundColor: "rgba(124, 58, 237, 0.04)" }}
-                    transition={{ duration: 0.15 }}
-                    onClick={() => fillSample(sample)}
+                    key={item.key}
+                    onClick={() => setCategory(item.key)}
                     sx={{
-                      px: 2,
-                      py: 1.5,
-                      cursor: "pointer",
+                      px: 1.15,
+                      py: 0.45,
+                      borderRadius: 1,
+                      fontSize: "0.72rem",
                       border: "1px solid",
-                      borderColor: "rgba(15, 23, 42, 0.08)",
-                      borderRadius: 2,
-                      bgcolor: "background.paper",
-                      transition: "border-color 0.15s ease",
-                      "&:hover": {
-                        borderColor: "rgba(124, 58, 237, 0.3)",
-                      },
+                      borderColor: active ? "#ff2442" : "#e5e7eb",
+                      color: active ? "#ff2442" : "#6b7280",
+                      bgcolor: active ? "rgba(255,36,66,0.06)" : "#fff",
+                      fontWeight: active ? 600 : 500,
+                      cursor: "pointer",
                     }}
                   >
-                    <Typography
-                      sx={{
-                        fontSize: "0.75rem",
-                        color: "text.tertiary",
-                        fontWeight: 500,
-                        mb: 0.5,
-                      }}
-                    >
-                      示例 {index + 1} · {CATEGORY_LABEL[sample.category]}
-                    </Typography>
-                    <Typography
-                      sx={{
-                        fontSize: "0.875rem",
-                        fontWeight: 500,
-                        color: "text.primary",
-                        lineHeight: 1.4,
-                      }}
-                    >
-                      {sample.title}
-                    </Typography>
+                    {item.label}
                   </Box>
-                ))}
-              </Stack>
-            </Paper>
+                );
+              })}
+            </Stack>
 
-            {/* Recent History */}
-            <Paper
-              elevation={0}
+            <Button
+              fullWidth
+              variant="contained"
+              onClick={handleSubmit}
+              disabled={!canSubmit}
+              endIcon={<ArrowForwardIcon sx={{ fontSize: 15 }} />}
               sx={{
-                p: 2.5,
-                borderRadius: 3,
-                border: "1px solid rgba(15, 23, 42, 0.08)",
-                boxShadow: "0 1px 3px rgba(15, 23, 42, 0.04)",
+                mt: 1.5,
+                height: 36,
+                borderRadius: 1.25,
+                fontSize: "0.78rem",
+                fontWeight: 600,
+                boxShadow: "none",
+                bgcolor: canSubmit ? "#ff2442" : "#f3f4f6",
+                color: canSubmit ? "#fff" : "#9ca3af",
+                "&:hover": {
+                  bgcolor: canSubmit ? "#ef1b3a" : "#f3f4f6",
+                  boxShadow: "none",
+                },
               }}
             >
-              <Typography
+              {submitText}
+            </Button>
+          </Box>
+        </Paper>
+
+        <Box sx={{ mt: 1.5 }}>
+          <Typography sx={{ fontSize: "0.68rem", color: "#9ca3af", mb: 0.6 }}>快速体验</Typography>
+          <Box sx={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 0.7 }}>
+            {SAMPLES.map((sample, index) => (
+              <Box
+                key={sample.title}
+                onClick={() => fillSample(sample)}
                 sx={{
-                  fontWeight: 600,
-                  fontSize: "0.9375rem",
-                  mb: 2,
-                  letterSpacing: "-0.005em",
+                  px: 0.8,
+                  py: 0.75,
+                  border: "1px solid #eceff3",
+                  borderRadius: 1,
+                  bgcolor: "#fff",
+                  cursor: "pointer",
                 }}
               >
-                最近诊断
-              </Typography>
-              {history.length === 0 ? (
-                <Box
+                <Typography sx={{ fontSize: "0.62rem", color: "#9ca3af" }}>
+                  示例 {index + 1}
+                </Typography>
+                <Typography
                   sx={{
-                    py: 4,
-                    textAlign: "center",
-                    color: "text.tertiary",
-                    fontSize: "0.875rem",
+                    mt: 0.25,
+                    fontSize: "0.68rem",
+                    color: "#374151",
+                    fontWeight: 500,
+                    lineHeight: 1.35,
+                    overflow: "hidden",
+                    display: "-webkit-box",
+                    WebkitLineClamp: 2,
+                    WebkitBoxOrient: "vertical",
                   }}
                 >
-                  <Typography sx={{ fontSize: "2rem", mb: 1 }}>📝</Typography>
-                  <Typography sx={{ fontSize: "0.875rem" }}>
-                    还没有诊断记录
-                  </Typography>
-                  <Typography sx={{ fontSize: "0.75rem", mt: 0.5, opacity: 0.7 }}>
-                    完成一次诊断后会在这里出现
-                  </Typography>
-                </Box>
-              ) : (
-                <Stack spacing={1.5}>
-                  {history.slice(0, 5).map((item, index) => (
-                    <Box
-                      key={`${item.title}-${index}`}
-                      sx={{
-                        px: 2,
-                        py: 1.5,
-                        border: "1px solid",
-                        borderColor: "rgba(15, 23, 42, 0.06)",
-                        borderRadius: 2,
-                        display: "grid",
-                        gridTemplateColumns: "52px 1fr",
-                        gap: 1.5,
-                        alignItems: "center",
-                        transition: "all 0.15s ease",
-                        "&:hover": {
-                          borderColor: "rgba(15, 23, 42, 0.12)",
-                          backgroundColor: "rgba(15, 23, 42, 0.02)",
-                        },
-                      }}
-                    >
-                      <Box
-                        sx={{
-                          width: 48,
-                          height: 48,
-                          borderRadius: "12px",
-                          display: "flex",
-                          flexDirection: "column",
-                          alignItems: "center",
-                          justifyContent: "center",
-                          background: `linear-gradient(135deg, ${GRADE_COLOR[item.grade]}15, ${GRADE_COLOR[item.grade]}08)`,
-                          border: `1.5px solid ${GRADE_COLOR[item.grade]}40`,
-                        }}
-                      >
-                        <Typography
-                          sx={{
-                            fontWeight: 700,
-                            fontSize: "1rem",
-                            color: GRADE_COLOR[item.grade],
-                            lineHeight: 1,
-                          }}
-                        >
-                          {Math.round(item.score)}
-                        </Typography>
-                        <Typography
-                          sx={{
-                            fontSize: "0.625rem",
-                            fontWeight: 700,
-                            color: GRADE_COLOR[item.grade],
-                            mt: 0.25,
-                          }}
-                        >
-                          {item.grade}
-                        </Typography>
-                      </Box>
-                      <Box sx={{ minWidth: 0 }}>
-                        <Typography
-                          sx={{
-                            fontSize: "0.875rem",
-                            fontWeight: 500,
-                            color: "text.primary",
-                            overflow: "hidden",
-                            textOverflow: "ellipsis",
-                            whiteSpace: "nowrap",
-                            lineHeight: 1.4,
-                          }}
-                        >
-                          {item.title}
-                        </Typography>
-                        <Typography
-                          sx={{
-                            fontSize: "0.75rem",
-                            color: "text.tertiary",
-                            mt: 0.25,
-                          }}
-                        >
-                          {CATEGORY_LABEL[item.category] || item.category} · {new Date(item.date).toLocaleDateString()}
-                        </Typography>
-                      </Box>
-                    </Box>
-                  ))}
-                </Stack>
-              )}
-            </Paper>
-          </Stack>
+                  {sample.title}
+                </Typography>
+              </Box>
+            ))}
+          </Box>
         </Box>
 
-        {/* Footer */}
-        <Typography
-          sx={{
-            textAlign: "center",
-            fontSize: "0.75rem",
-            color: "text.tertiary",
-            mt: 6,
-            pb: 2,
-          }}
-        >
-          薯医 NoteRx · AI 驱动的小红书笔记诊断
+        <Box sx={{ mt: 1.2 }}>
+          <Typography sx={{ fontSize: "0.68rem", color: "#9ca3af", mb: 0.6 }}>历史</Typography>
+          <Box sx={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 0.7 }}>
+            {history.slice(0, 3).map((item, index) => (
+              <Box
+                key={`${item.title}-${index}`}
+                sx={{
+                  px: 0.8,
+                  py: 0.75,
+                  border: "1px solid #eceff3",
+                  borderRadius: 1,
+                  bgcolor: "#fff",
+                }}
+              >
+                <Typography sx={{ fontSize: "0.62rem", color: "#9ca3af" }}>
+                  {CATEGORY_LABEL[item.category] || item.category}
+                </Typography>
+                <Typography
+                  sx={{
+                    mt: 0.25,
+                    fontSize: "0.68rem",
+                    color: "#374151",
+                    fontWeight: 500,
+                    lineHeight: 1.35,
+                    overflow: "hidden",
+                    display: "-webkit-box",
+                    WebkitLineClamp: 2,
+                    WebkitBoxOrient: "vertical",
+                  }}
+                >
+                  {item.title}
+                </Typography>
+              </Box>
+            ))}
+            {history.length === 0 && (
+              <Box
+                sx={{
+                  gridColumn: "1 / -1",
+                  px: 0.8,
+                  py: 0.9,
+                  border: "1px dashed #e5e7eb",
+                  borderRadius: 1,
+                  color: "#9ca3af",
+                  fontSize: "0.7rem",
+                  textAlign: "center",
+                }}
+              >
+                暂无历史记录
+              </Box>
+            )}
+          </Box>
+        </Box>
+
+        <Typography sx={{ mt: 2.2, textAlign: "center", fontSize: "0.62rem", color: "#d1d5db" }}>
+          薯医 NoteRx · AI 驱动笔记诊断
         </Typography>
       </Box>
     </Box>

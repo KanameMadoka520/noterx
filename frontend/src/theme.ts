@@ -1,19 +1,26 @@
-import { createTheme, type ThemeOptions } from "@mui/material/styles";
+﻿import { createTheme, type ThemeOptions } from "@mui/material/styles";
 
-// Airbnb + Apple 融合设计系统
-// 温暖、精致、内容优先
+const shadows = [
+  "none",
+  "rgba(0, 0, 0, 0.02) 0px 0px 0px 1px",
+  "rgba(0, 0, 0, 0.02) 0px 0px 0px 1px, rgba(0, 0, 0, 0.04) 0px 2px 6px, rgba(0, 0, 0, 0.06) 0px 4px 8px",
+  "rgba(0, 0, 0, 0.02) 0px 0px 0px 1px, rgba(0, 0, 0, 0.06) 0px 4px 12px",
+  "rgba(0, 0, 0, 0.08) 0px 8px 24px",
+  "rgba(0, 0, 0, 0.12) 0px 16px 48px",
+  ...Array(19).fill("rgba(0, 0, 0, 0.12) 0px 16px 48px"),
+] as unknown as ThemeOptions["shadows"];
 
 const themeOptions: ThemeOptions = {
   palette: {
     mode: "light",
     primary: {
-      main: "#e11d48", // 玫瑰红 (融合 Airbnb Rausch + 小红书调性)
+      main: "#e11d48",
       light: "#fb7185",
       dark: "#be123c",
       contrastText: "#ffffff",
     },
     secondary: {
-      main: "#52525b", // 暖灰
+      main: "#52525b",
       light: "#71717a",
       dark: "#3f3f46",
       contrastText: "#ffffff",
@@ -39,17 +46,17 @@ const themeOptions: ThemeOptions = {
       dark: "#059669",
     },
     background: {
-      default: "#fafaf9", // 温暖的米白 (类似 Apple #f5f5f7 但更暖)
+      default: "#fafaf9",
       paper: "#ffffff",
     },
     text: {
-      primary: "#18181b", // 温暖近黑 (类似 Airbnb #222222)
+      primary: "#18181b",
       secondary: "#71717a",
-    },
+      tertiary: "#a1a1aa",
+    } as ThemeOptions["palette"] extends { text: infer T } ? T : never,
     divider: "rgba(0, 0, 0, 0.06)",
   },
   typography: {
-    // Apple 风格系统字体栈 + 精准字间距
     fontFamily: [
       "-apple-system",
       "BlinkMacSystemFont",
@@ -65,106 +72,24 @@ const themeOptions: ThemeOptions = {
     fontWeightRegular: 400,
     fontWeightMedium: 500,
     fontWeightBold: 600,
-    // Apple 风格的精准字间距系统
-    h1: {
-      fontWeight: 600,
-      fontSize: "3rem",
-      lineHeight: 1.1,
-      letterSpacing: "-0.025em",
-    },
-    h2: {
-      fontWeight: 600,
-      fontSize: "2.25rem",
-      lineHeight: 1.15,
-      letterSpacing: "-0.02em",
-    },
-    h3: {
-      fontWeight: 600,
-      fontSize: "1.5rem",
-      lineHeight: 1.25,
-      letterSpacing: "-0.015em",
-    },
-    h4: {
-      fontWeight: 600,
-      fontSize: "1.25rem",
-      lineHeight: 1.3,
-      letterSpacing: "-0.01em",
-    },
-    h5: {
-      fontWeight: 600,
-      fontSize: "1.125rem",
-      lineHeight: 1.35,
-      letterSpacing: "-0.005em",
-    },
-    h6: {
-      fontWeight: 600,
-      fontSize: "1rem",
-      lineHeight: 1.4,
-      letterSpacing: "-0.005em",
-    },
-    subtitle1: {
-      fontWeight: 500,
-      fontSize: "1rem",
-      lineHeight: 1.5,
-      letterSpacing: "-0.01em",
-    },
-    subtitle2: {
-      fontWeight: 500,
-      fontSize: "0.875rem",
-      lineHeight: 1.5,
-      letterSpacing: "-0.005em",
-    },
-    body1: {
-      fontWeight: 400,
-      fontSize: "1rem",
-      lineHeight: 1.6,
-      letterSpacing: "-0.01em",
-    },
-    body2: {
-      fontWeight: 400,
-      fontSize: "0.875rem",
-      lineHeight: 1.6,
-      letterSpacing: "-0.005em",
-    },
-    button: {
-      fontWeight: 500,
-      fontSize: "0.9375rem",
-      letterSpacing: "-0.01em",
-      textTransform: "none",
-    },
-    caption: {
-      fontWeight: 400,
-      fontSize: "0.75rem",
-      lineHeight: 1.5,
-      letterSpacing: "0",
-    },
-    overline: {
-      fontWeight: 500,
-      fontSize: "0.75rem",
-      lineHeight: 1.5,
-      letterSpacing: "0.05em",
-      textTransform: "uppercase",
-    },
+    h1: { fontWeight: 600, fontSize: "3rem", lineHeight: 1.1, letterSpacing: "-0.025em" },
+    h2: { fontWeight: 600, fontSize: "2.25rem", lineHeight: 1.15, letterSpacing: "-0.02em" },
+    h3: { fontWeight: 600, fontSize: "1.5rem", lineHeight: 1.25, letterSpacing: "-0.015em" },
+    h4: { fontWeight: 600, fontSize: "1.25rem", lineHeight: 1.3, letterSpacing: "-0.01em" },
+    h5: { fontWeight: 600, fontSize: "1.125rem", lineHeight: 1.35, letterSpacing: "-0.005em" },
+    h6: { fontWeight: 600, fontSize: "1rem", lineHeight: 1.4, letterSpacing: "-0.005em" },
+    subtitle1: { fontWeight: 500, fontSize: "1rem", lineHeight: 1.5, letterSpacing: "-0.01em" },
+    subtitle2: { fontWeight: 500, fontSize: "0.875rem", lineHeight: 1.5, letterSpacing: "-0.005em" },
+    body1: { fontWeight: 400, fontSize: "1rem", lineHeight: 1.6, letterSpacing: "-0.01em" },
+    body2: { fontWeight: 400, fontSize: "0.875rem", lineHeight: 1.6, letterSpacing: "-0.005em" },
+    button: { fontWeight: 500, fontSize: "0.9375rem", letterSpacing: "-0.01em", textTransform: "none" },
+    caption: { fontWeight: 400, fontSize: "0.75rem", lineHeight: 1.5, letterSpacing: "0" },
+    overline: { fontWeight: 500, fontSize: "0.75rem", lineHeight: 1.5, letterSpacing: "0.05em", textTransform: "uppercase" },
   },
   shape: {
-    borderRadius: 12, // Airbnb 风格的大圆角
+    borderRadius: 12,
   },
-  // Airbnb 三层阴影系统
-  shadows: [
-    "none",
-    // Level 1: 微妙边框
-    "rgba(0, 0, 0, 0.02) 0px 0px 0px 1px",
-    // Level 2: 柔和环境阴影 (Airbnb 标准卡片阴影)
-    "rgba(0, 0, 0, 0.02) 0px 0px 0px 1px, rgba(0, 0, 0, 0.04) 0px 2px 6px, rgba(0, 0, 0, 0.06) 0px 4px 8px",
-    // Level 3: 悬停提升
-    "rgba(0, 0, 0, 0.02) 0px 0px 0px 1px, rgba(0, 0, 0, 0.06) 0px 4px 12px",
-    // Level 4: 更强的悬停
-    "rgba(0, 0, 0, 0.08) 0px 8px 24px",
-    // Level 5: 弹出层
-    "rgba(0, 0, 0, 0.12) 0px 16px 48px",
-    // Level 6-24: 扩展
-    ...Array(19).fill("rgba(0, 0, 0, 0.12) 0px 16px 48px"),
-  ],
+  shadows,
   components: {
     MuiCssBaseline: {
       styleOverrides: {
@@ -182,7 +107,7 @@ const themeOptions: ThemeOptions = {
       styleOverrides: {
         root: {
           textTransform: "none",
-          borderRadius: 10, // Airbnb 风格
+          borderRadius: 10,
           padding: "12px 24px",
           fontWeight: 500,
           transition: "all 0.2s cubic-bezier(0.4, 0, 0.2, 1)",
@@ -206,23 +131,14 @@ const themeOptions: ThemeOptions = {
             borderColor: "rgba(0, 0, 0, 0.2)",
           },
         },
-        text: {
-          color: "#71717a",
-          padding: "10px 16px",
-          "&:hover": {
-            backgroundColor: "rgba(0, 0, 0, 0.04)",
-            color: "#18181b",
-          },
-        },
       },
     },
     MuiPaper: {
       styleOverrides: {
         root: {
           backgroundImage: "none",
-          // Airbnb 三层阴影
           boxShadow: "rgba(0, 0, 0, 0.02) 0px 0px 0px 1px, rgba(0, 0, 0, 0.04) 0px 2px 6px, rgba(0, 0, 0, 0.06) 0px 4px 8px",
-          borderRadius: 16, // 大圆角
+          borderRadius: 16,
         },
       },
     },
@@ -274,17 +190,6 @@ const themeOptions: ThemeOptions = {
           fontSize: "0.8125rem",
           height: 32,
           transition: "all 0.15s ease",
-        },
-        filled: {
-          backgroundColor: "rgba(0, 0, 0, 0.06)",
-          color: "#18181b",
-          "&:hover": {
-            backgroundColor: "rgba(0, 0, 0, 0.1)",
-          },
-        },
-        outlined: {
-          borderColor: "rgba(0, 0, 0, 0.12)",
-          color: "#71717a",
         },
       },
     },
@@ -356,19 +261,19 @@ const themeOptions: ThemeOptions = {
           border: "none",
           boxShadow: "rgba(0, 0, 0, 0.04) 0px 2px 8px",
         },
-        standardWarning: {
+        colorWarning: {
           backgroundColor: "rgba(245, 158, 11, 0.1)",
           color: "#92400e",
         },
-        standardError: {
+        colorError: {
           backgroundColor: "rgba(239, 68, 68, 0.1)",
           color: "#991b1b",
         },
-        standardSuccess: {
+        colorSuccess: {
           backgroundColor: "rgba(16, 185, 129, 0.1)",
           color: "#065f46",
         },
-        standardInfo: {
+        colorInfo: {
           backgroundColor: "rgba(14, 165, 233, 0.1)",
           color: "#0c4a6e",
         },
