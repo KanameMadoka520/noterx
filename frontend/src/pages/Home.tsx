@@ -15,6 +15,9 @@ import UploadZone from "../components/UploadZone";
 import { quickRecognize } from "../utils/api";
 import type { QuickRecognizeResult } from "../utils/api";
 
+type UploadStage = "core" | "cover" | "details" | "profile" | "comments";
+const GUIDE_STAGE_ORDER: UploadStage[] = ["core", "cover", "details", "profile", "comments"];
+
 /** @returns A stable key for a File object */
 function fkey(f: File) {
   return `${f.name}_${f.size}_${f.lastModified}`;
@@ -47,6 +50,8 @@ export default function Home() {
   const [aiSuggestion, setAiSuggestion] = useState("");
   const [uploadingPulse, setUploadingPulse] = useState(false);
   const [analyzingPulse, setAnalyzingPulse] = useState(false);
+  const [fileStageMap, setFileStageMap] = useState<Record<string, UploadStage>>({});
+  const [activeUploadStage, setActiveUploadStage] = useState<UploadStage>("core");
 
   const [userEdited, setUserEdited] = useState({ title: false, content: false, category: false });
 
@@ -78,24 +83,45 @@ export default function Home() {
     }, 500);
   }, []);
 
+  const activeStageFiles = useMemo(
+    () => files.filter((f) => (fileStageMap[fkey(f)] ?? "core") === activeUploadStage),
+    [files, fileStageMap, activeUploadStage],
+  );
+
   const handleFilesChange = useCallback(
     (newFiles: File[]) => {
-      setFiles(newFiles);
+      const trimmed = newFiles.slice(0, 9);
+      setFiles((prev) => {
+        const next = [
+          ...prev.filter((f) => (fileStageMap[fkey(f)] ?? "core") !== activeUploadStage),
+          ...trimmed,
+        ];
+        return next;
+      });
+      setFileStageMap((prev) => {
+        const next: Record<string, UploadStage> = {};
+        for (const file of files) {
+          const key = fkey(file);
+          const stage = prev[key] ?? "core";
+          if (stage !== activeUploadStage) next[key] = stage;
+        }
+        for (const file of trimmed) {
+          next[fkey(file)] = activeUploadStage;
+        }
+        return next;
+      });
       if (newFiles.length > 0) triggerUploadPulse();
     },
-    [triggerUploadPulse],
+    [files, fileStageMap, activeUploadStage, triggerUploadPulse],
   );
 
   const appendFiles = useCallback(
     (incoming: File[]) => {
       if (incoming.length === 0) return;
-      setFiles((prev) => {
-        const next = [...prev, ...incoming].slice(0, 9);
-        if (next.length !== prev.length) triggerUploadPulse();
-        return next;
-      });
+      const nextStageFiles = [...activeStageFiles, ...incoming].slice(0, 9);
+      handleFilesChange(nextStageFiles);
     },
-    [triggerUploadPulse],
+    [activeStageFiles, handleFilesChange],
   );
 
   /** Ctrl+V paste images */
@@ -118,7 +144,14 @@ export default function Home() {
 
   const anyLoading = useMemo(() => Object.values(aiLoading).some(Boolean), [aiLoading]);
   const allResults = useMemo(() => Object.values(aiRecogs), [aiRecogs]);
-  const successResults = useMemo(() => allResults.filter((r) => r.success), [allResults]);
+  const successRecogEntries = useMemo(
+    () => Object.entries(aiRecogs).filter(([, r]) => r.success),
+    [aiRecogs],
+  );
+  const successResults = useMemo(
+    () => successRecogEntries.map(([, r]) => r),
+    [successRecogEntries],
+  );
 
   const aggregated = useMemo(() => {
     let bestTitle = "";
@@ -126,19 +159,28 @@ export default function Home() {
     let bestCategory = "";
     let bestSummary = "";
 
-    for (const r of successResults) {
-      if (!bestTitle && r.title?.trim()) bestTitle = r.title.trim();
-      if (!bestContent && r.content_text?.trim()) bestContent = r.content_text.trim();
-      if (!bestCategory && r.category?.trim()) bestCategory = r.category.trim();
-      if (!bestSummary && r.summary?.trim()) bestSummary = r.summary.trim();
+    for (const [key, r] of successRecogEntries) {
+      const stage = fileStageMap[key] ?? "core";
+      if (stage === "details") {
+        if (!bestTitle && r.title?.trim()) bestTitle = r.title.trim();
+        if (!bestContent && r.content_text?.trim()) bestContent = r.content_text.trim();
+      }
+      if (stage !== "core") {
+        if (!bestCategory && r.category?.trim()) bestCategory = r.category.trim();
+        if (!bestSummary && r.summary?.trim()) bestSummary = r.summary.trim();
+      }
     }
 
     return { bestTitle, bestContent, bestCategory, bestSummary };
-  }, [successResults]);
+  }, [successRecogEntries, fileStageMap]);
 
   const imageFileKeys = useMemo(
-    () => new Set(files.filter((f) => f.type.startsWith("image/")).map(fkey)),
-    [files],
+    () => new Set(
+      files
+        .filter((f) => f.type.startsWith("image/") && (fileStageMap[fkey(f)] ?? "core") !== "core")
+        .map(fkey),
+    ),
+    [files, fileStageMap],
   );
 
   const pendingRecognition = useMemo(() => {
@@ -196,7 +238,7 @@ export default function Home() {
     };
   }, [aggregated, userEdited]);
 
-  const runRecognition = useCallback(async (file: File) => {
+  const runRecognition = useCallback(async (file: File, slotHint?: "cover" | "content" | "profile" | "comments") => {
     const key = fkey(file);
     if (recognizeInFlightRef.current.has(key)) return;
     recognizeInFlightRef.current.add(key);
@@ -205,7 +247,7 @@ export default function Home() {
       return { ...p, [key]: true };
     });
     try {
-      const res = await quickRecognize(file);
+      const res = await quickRecognize(file, slotHint);
       setAiRecogs((p) => ({ ...p, [key]: res }));
     } catch {
       setAiRecogs((p) => ({ ...p, [key]: { success: false, slot_type: "unknown", category: "", summary: "", error: "识别失败" } }));
@@ -217,6 +259,15 @@ export default function Home() {
 
   useEffect(() => {
     const validKeys = new Set(files.map(fkey));
+    setFileStageMap((prev) => {
+      let changed = false;
+      const next: Record<string, UploadStage> = {};
+      Object.entries(prev).forEach(([key, value]) => {
+        if (validKeys.has(key)) next[key] = value;
+        else changed = true;
+      });
+      return changed ? next : prev;
+    });
     setAiRecogs((prev) => {
       let changed = false;
       const next: Record<string, QuickRecognizeResult> = {};
@@ -241,14 +292,23 @@ export default function Home() {
   }, [files]);
 
   useEffect(() => {
+    const slotHintByStage: Record<UploadStage, "cover" | "content" | "profile" | "comments" | undefined> = {
+      core: undefined,
+      cover: "cover",
+      details: "content",
+      profile: "profile",
+      comments: "comments",
+    };
     files.forEach((file) => {
       if (!file.type.startsWith("image/")) return;
       const key = fkey(file);
+      const stage = fileStageMap[key] ?? "core";
+      if (stage === "core") return;
       if (!aiRecogs[key] && !aiLoading[key]) {
-        void runRecognition(file);
+        void runRecognition(file, slotHintByStage[stage]);
       }
     });
-  }, [files, aiRecogs, aiLoading, runRecognition]);
+  }, [files, fileStageMap, aiRecogs, aiLoading, runRecognition]);
 
   useEffect(() => {
     if (!prevPendingRecognitionRef.current && pendingRecognition && analyzePulseTimerRef.current) {
@@ -269,30 +329,34 @@ export default function Home() {
 
   useEffect(() => {
     const recognizedSlots = new Set(
-      successResults
-        .map((r) => (typeof r.slot_type === "string" ? r.slot_type : ""))
+      successRecogEntries
+        .filter(([key]) => (fileStageMap[key] ?? "core") !== "core")
+        .map(([, r]) => (typeof r.slot_type === "string" ? r.slot_type : ""))
         .filter(Boolean),
     );
-    const hasCoreContent = files.length > 0;
+    const hasCoreContent = files.some((f) => (fileStageMap[fkey(f)] ?? "core") === "core");
     const hasCover = hasCoreContent && (
+      files.some((f) => (fileStageMap[fkey(f)] ?? "core") === "cover")
+      || files.some((f) => (fileStageMap[fkey(f)] ?? "core") === "core" && (f.type.startsWith("video/") || f.type.startsWith("image/")))
+      ||
       recognizedSlots.has("cover")
-      || files.some((f) => f.type.startsWith("video/"))
-      || files.some((f) => f.type.startsWith("image/"))
     );
     const hasBody = Boolean(content.trim() || aggregated.bestContent);
-    const hasProfile = recognizedSlots.has("profile");
-    const hasComments = recognizedSlots.has("comments");
+    const hasProfile = files.some((f) => (fileStageMap[fkey(f)] ?? "core") === "profile") || recognizedSlots.has("profile");
+    const hasComments = files.some((f) => (fileStageMap[fkey(f)] ?? "core") === "comments") || recognizedSlots.has("comments");
 
     if (!hasCoreContent) setAiSuggestion("");
     else if (!hasCover) setAiSuggestion("第 2 步建议补一张封面截图（可选），可提升封面维度判断。");
-    else if (!hasBody) setAiSuggestion("第 3 步正文会由 AI 自动提取，识别后你只需确认或微调。");
+    else if (!hasBody) setAiSuggestion("第 3 步请上传笔记详情截图，AI 会提取标题和正文供你确认。");
     else if (!hasProfile) setAiSuggestion("第 4 步可补充主页截图，帮助判断账号定位和权重。");
     else if (!hasComments) setAiSuggestion("第 5 步可补充评论区截图，分析互动质量与争议点。");
     else setAiSuggestion("核心信息已较完整，可以直接开始诊断。");
-  }, [files, successResults, content, aggregated.bestContent]);
+  }, [files, fileStageMap, successRecogEntries, content, aggregated.bestContent]);
 
   useEffect(() => {
     if (files.length === 0) {
+      setFileStageMap({});
+      setActiveUploadStage("core");
       setAiRecogs({});
       setAiLoading({});
       recognizeInFlightRef.current.clear();
@@ -341,7 +405,16 @@ export default function Home() {
       return { label: "上传中", tone: "info" as const, text: "素材已接收，正在准备识别..." };
     }
     if (pendingRecognition) {
-      return { label: "识别中", tone: "info" as const, text: "AI 正在识别标题、正文和分类..." };
+      const stageText = activeUploadStage === "cover"
+        ? "AI 正在识别封面信息..."
+        : activeUploadStage === "details"
+          ? "AI 正在识别笔记详情（标题/正文）..."
+          : activeUploadStage === "profile"
+            ? "AI 正在识别主页信息..."
+            : activeUploadStage === "comments"
+              ? "AI 正在识别评论区信息..."
+              : "AI 正在识别当前阶段素材...";
+      return { label: "识别中", tone: "info" as const, text: stageText };
     }
     if (analyzingPulse) {
       return { label: "分析中", tone: "info" as const, text: "正在汇总识别结果并回填表单..." };
@@ -350,7 +423,7 @@ export default function Home() {
       return { label: "已就绪", tone: "success" as const, text: "识别完成，可继续发起诊断。" };
     }
     return null;
-  }, [files.length, uploadingPulse, pendingRecognition, analyzingPulse, allRecognitionDone]);
+  }, [files.length, uploadingPulse, pendingRecognition, analyzingPulse, allRecognitionDone, activeUploadStage]);
 
   const lockInputs = !!processingStatus && processingStatus.label !== "已就绪";
 
@@ -370,25 +443,26 @@ export default function Home() {
 
   const recognizedSlots = useMemo(
     () => new Set(
-      successResults
-        .map((r) => (typeof r.slot_type === "string" ? r.slot_type : ""))
+      successRecogEntries
+        .filter(([key]) => (fileStageMap[key] ?? "core") !== "core")
+        .map(([, r]) => (typeof r.slot_type === "string" ? r.slot_type : ""))
         .filter(Boolean),
     ),
-    [successResults],
+    [successRecogEntries, fileStageMap],
   );
-  const guideSteps = ["上传核心内容", "上传封面（可选）", "确认/补充正文", "补充主页", "补充评论区"];
+  const guideSteps = ["上传核心内容", "上传封面（可选）", "上传笔记详情", "补充主页", "补充评论区"];
   const guideDone = useMemo(() => {
-    const hasCore = files.length > 0;
+    const hasCore = files.some((f) => (fileStageMap[fkey(f)] ?? "core") === "core");
     const hasCover = hasCore && (
-      recognizedSlots.has("cover")
-      || files.some((f) => f.type.startsWith("video/"))
-      || files.some((f) => f.type.startsWith("image/"))
+      files.some((f) => (fileStageMap[fkey(f)] ?? "core") === "cover")
+      || recognizedSlots.has("cover")
+      || files.some((f) => (fileStageMap[fkey(f)] ?? "core") === "core" && (f.type.startsWith("video/") || f.type.startsWith("image/")))
     );
     const hasBody = Boolean(content.trim() || aggregated.bestContent);
-    const hasProfile = recognizedSlots.has("profile");
-    const hasComments = recognizedSlots.has("comments");
+    const hasProfile = files.some((f) => (fileStageMap[fkey(f)] ?? "core") === "profile") || recognizedSlots.has("profile");
+    const hasComments = files.some((f) => (fileStageMap[fkey(f)] ?? "core") === "comments") || recognizedSlots.has("comments");
     return [hasCore, hasCover, hasBody, hasProfile, hasComments];
-  }, [files, recognizedSlots, content, aggregated.bestContent]);
+  }, [files, fileStageMap, recognizedSlots, content, aggregated.bestContent]);
   const currentGuideIndex = useMemo(() => {
     const nextPending = guideDone.findIndex((x) => !x);
     return nextPending === -1 ? guideSteps.length - 1 : nextPending;
@@ -407,58 +481,61 @@ export default function Home() {
   const guideCard = (
     <Box
       sx={{
-        p: { xs: 1.75, md: 1.35 },
+        p: { xs: 1.5, md: 1.2 },
         borderRadius: "14px",
         flexShrink: 0,
-        background: "linear-gradient(145deg, rgba(255, 245, 247, 0.95) 0%, rgba(255, 250, 251, 0.98) 100%)",
-        border: "1px solid rgba(255, 36, 66, 0.12)",
-        boxShadow: "inset 0 1px 0 rgba(255, 255, 255, 0.85)",
+        background: "linear-gradient(145deg, rgba(250, 251, 255, 0.95) 0%, rgba(255, 255, 255, 0.98) 100%)",
+        border: "1px solid rgba(0, 0, 0, 0.08)",
+        boxShadow: "inset 0 1px 0 rgba(255, 255, 255, 0.88)",
       }}
     >
-      <Typography
-        sx={{
-          fontSize: { xs: 12, md: 11 },
-          background: "linear-gradient(90deg, #ff2442, #ff6b81)",
-          backgroundClip: "text",
-          WebkitBackgroundClip: "text",
-          WebkitTextFillColor: "transparent",
-          fontWeight: 700,
-          letterSpacing: "0.02em",
-          mb: { xs: 1, md: 0.85 },
-        }}
-      >
-        引导 · 先传核心内容，再按需补充截图，诊断更完整
-      </Typography>
-      <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.75 }}>
-        {guideSteps.map((step, idx) => (
-          <Chip
-            key={step}
+      <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 1, mb: 0.9 }}>
+        <Typography sx={{ fontSize: { xs: 12, md: 11 }, color: "#111827", fontWeight: 700 }}>
+          阶段上传
+        </Typography>
+        <Chip
+          size="small"
+          label={`推荐：${guideSteps[currentGuideIndex]}`}
+          sx={{
+            height: 24,
+            fontSize: { xs: 10, md: 10 },
+            fontWeight: 700,
+            bgcolor: "rgba(37, 99, 235, 0.1)",
+            color: "#1d4ed8",
+            border: "1px solid rgba(37, 99, 235, 0.2)",
+          }}
+        />
+      </Box>
+      <Box sx={{ display: "grid", gridTemplateColumns: { xs: "repeat(2, minmax(0, 1fr))", md: "repeat(5, minmax(0, 1fr))" }, gap: 0.75 }}>
+        {GUIDE_STAGE_ORDER.map((stage, idx) => (
+          <Button
+            key={stage}
+            variant={activeUploadStage === stage ? "contained" : "outlined"}
             size="small"
-            label={step}
+            onClick={() => setActiveUploadStage(stage)}
             sx={{
-              background: guideDone[idx]
-                ? "linear-gradient(135deg, #ff3d5c, #e61e3d)"
-                : idx === currentGuideIndex
-                  ? "rgba(255, 236, 220, 0.95)"
-                  : "rgba(255,255,255,0.92)",
-              color: guideDone[idx] ? "#fff" : idx === currentGuideIndex ? "#b45309" : "#6b6b6b",
-              border: guideDone[idx] ? "none" : idx === currentGuideIndex ? "1px solid rgba(180, 83, 9, 0.35)" : "1px solid rgba(0,0,0,0.06)",
+              borderRadius: "10px",
               fontSize: { xs: 11, md: 10 },
-              height: { md: 24 },
-              fontWeight: idx === currentGuideIndex ? 700 : 500,
-              boxShadow: guideDone[idx]
-                ? "0 2px 8px rgba(255, 36, 66, 0.25)"
-                : idx === currentGuideIndex
-                  ? "0 1px 6px rgba(180, 83, 9, 0.18)"
-                  : "0 1px 2px rgba(0,0,0,0.04)",
-              transition: "all 0.2s ease",
+              fontWeight: 700,
+              py: 0.6,
+              minHeight: 34,
+              textTransform: "none",
+              borderColor: activeUploadStage === stage ? "transparent" : "rgba(0,0,0,0.12)",
+              bgcolor: activeUploadStage === stage ? "#2563eb" : "rgba(255,255,255,0.95)",
+              color: activeUploadStage === stage ? "#fff" : "#374151",
+              boxShadow: activeUploadStage === stage ? "0 6px 16px rgba(37,99,235,0.24)" : "none",
+              "&:hover": {
+                borderColor: activeUploadStage === stage ? "transparent" : "rgba(0,0,0,0.2)",
+                bgcolor: activeUploadStage === stage ? "#1d4ed8" : "rgba(249,250,251,0.95)",
+              },
             }}
-          />
+          >
+            {`${idx + 1}. ${guideSteps[idx]}`}
+          </Button>
         ))}
       </Box>
-      <Typography sx={{ mt: { xs: 1, md: 0.85 }, fontSize: { xs: 12, md: 11 }, color: "#5c5c5c", lineHeight: 1.55 }}>
-        <Box component="span" sx={{ color: "#ff2442", fontWeight: 600 }}>当前建议</Box>
-        ：{guideSteps[currentGuideIndex]}
+      <Typography sx={{ mt: 0.8, fontSize: { xs: 11, md: 10 }, color: "#6b7280", lineHeight: 1.5 }}>
+        当前阶段：{guideSteps[GUIDE_STAGE_ORDER.indexOf(activeUploadStage)]}。上传的素材只会归属这个阶段。
       </Typography>
     </Box>
   );
@@ -760,7 +837,7 @@ export default function Home() {
             {stepHeader}
             {guideCard}
             <Box sx={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
-              <UploadZone files={files} onFilesChange={handleFilesChange} maxFiles={9} compact />
+              <UploadZone files={activeStageFiles} onFilesChange={handleFilesChange} maxFiles={9} compact />
             </Box>
           </Paper>
 
@@ -898,11 +975,11 @@ export default function Home() {
             >
               <Stack spacing={2}>
                 {guideCard}
-                <UploadZone files={files} onFilesChange={handleFilesChange} maxFiles={9} />
+                <UploadZone files={activeStageFiles} onFilesChange={handleFilesChange} maxFiles={9} />
                 <Typography sx={{ fontSize: 11, color: "#999", textAlign: "center" }}>
-                  {files.length === 0 ? "请先上传核心内容（视频或照片）" : wizardHold ? "可点下方按钮进入填写信息" : "即将自动进入「确认并完善信息」…"}
+                  {activeStageFiles.length === 0 ? "请上传当前阶段素材" : wizardHold ? "可点下方按钮进入填写信息" : "即将自动进入「确认并完善信息」…"}
                 </Typography>
-                {wizardHold && files.length > 0 && (
+                {wizardHold && activeStageFiles.length > 0 && (
                   <Button variant="outlined" fullWidth onClick={handleWizardContinue} sx={{ borderRadius: "14px", py: 1.1, fontWeight: 600 }}>
                     前往完善信息
                   </Button>
