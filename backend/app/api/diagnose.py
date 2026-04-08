@@ -384,35 +384,41 @@ async def diagnose_stream(
                            image_bytes is not None and 1 or 0)
         yield sse("pre_score", {"title": title, "category": category, **score})
 
-        # 2) Run orchestrator with progress
+        # 2) Run orchestrator with realtime progress callbacks
         orchestrator = Orchestrator()
+        queue: asyncio.Queue[tuple[str, dict]] = asyncio.Queue()
 
-        # Patch orchestrator to emit progress events
-        progress_events: list[tuple[str, dict]] = []
-        _orig_run = orchestrator.run
+        async def _progress(step: str, message: str):
+            await queue.put(("progress", {"step": step, "message": message}))
 
-        async def _patched_run(**kwargs):
-            # We can't easily hook into the middle of orchestrator.run,
-            # so we just run it and send the result at the end.
-            return await _orig_run(**kwargs)
+        async def _run_job():
+            try:
+                report = await orchestrator.run(
+                    title=title,
+                    content=content,
+                    category=category,
+                    tags=tag_list,
+                    cover_image=image_bytes,
+                    video_analysis=video_analysis,
+                    progress_cb=_progress,
+                )
+                await queue.put(("result", report))
+            except Exception as e:
+                logger.error("Stream diagnose error: %s", e)
+                await queue.put(("error", {"message": str(e)}))
+            finally:
+                await queue.put(("done", {}))
 
+        task = asyncio.create_task(_run_job())
         try:
-            # Send "agents_start" event
-            yield sse("progress", {"step": "agents_start", "message": "5 位 AI 专家开始并行诊断..."})
-
-            report = await orchestrator.run(
-                title=title, content=content, category=category,
-                tags=tag_list, cover_image=image_bytes, video_analysis=video_analysis,
-            )
-
-            yield sse("progress", {"step": "agents_done", "message": "诊断完成，正在生成报告..."})
-
-            # 3) Final result
-            yield sse("result", report)
-
-        except Exception as e:
-            logger.error("Stream diagnose error: %s", e)
-            yield sse("error", {"message": str(e)})
+            while True:
+                event, data = await queue.get()
+                if event == "done":
+                    break
+                yield sse(event, data)
+        finally:
+            if not task.done():
+                task.cancel()
 
     return StreamingResponse(
         event_generator(),
