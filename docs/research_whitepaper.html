@@ -163,76 +163,67 @@
   }
 
   /* ── Launch transition overlay ── */
-  .launch-overlay {
+  #launch-overlay {
     position: fixed;
     inset: 0;
-    z-index: 9999;
+    z-index: 99999;
     pointer-events: none;
+    overflow: hidden;
+  }
+
+  #launch-overlay .lo-bg {
+    position: absolute;
+    width: 100px; height: 100px;
+    border-radius: 50%;
+    background: #10b981;
+    transform: translate(-50%, -50%) scale(0);
+    transition: transform 0.65s cubic-bezier(0.4, 0, 0, 1);
+    will-change: transform;
+  }
+
+  #launch-overlay.go .lo-bg {
+    transform: translate(-50%, -50%) scale(1);
+  }
+
+  #launch-overlay .lo-center {
+    position: absolute;
+    inset: 0;
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
     opacity: 0;
+    transition: opacity 0.3s 0.45s;
   }
 
-  .launch-overlay.active {
-    pointer-events: all;
+  #launch-overlay.go .lo-center {
     opacity: 1;
   }
 
-  .launch-overlay .circle {
-    width: 0; height: 0;
-    border-radius: 50%;
-    background: linear-gradient(135deg, #10b981, #059669);
-    transition: all 0.7s cubic-bezier(0.4, 0, 0, 1);
-    position: absolute;
-  }
-
-  .launch-overlay.active .circle {
-    width: 300vmax; height: 300vmax;
-    border-radius: 0;
-  }
-
-  .launch-overlay .launch-content {
-    position: relative;
-    z-index: 1;
-    color: white;
-    text-align: center;
-    opacity: 0;
-    transform: translateY(20px);
-    transition: opacity 0.4s 0.35s, transform 0.4s 0.35s;
-  }
-
-  .launch-overlay.active .launch-content {
-    opacity: 1;
-    transform: translateY(0);
-  }
-
-  .launch-overlay .launch-logo {
-    font-size: clamp(2rem, 5vw, 3.5rem);
+  #launch-overlay .lo-logo {
+    font-size: clamp(1.8rem, 5vw, 3rem);
     font-weight: 900;
+    color: white;
     letter-spacing: -0.03em;
-    margin-bottom: 0.5rem;
   }
 
-  .launch-overlay .launch-sub {
+  #launch-overlay .lo-sub {
     font-size: 1rem;
-    opacity: 0.7;
+    color: rgba(255,255,255,0.7);
     font-weight: 300;
+    margin-top: 0.4rem;
   }
 
-  .launch-overlay .launch-spinner {
-    width: 32px; height: 32px;
-    border: 3px solid rgba(255,255,255,0.2);
+  #launch-overlay .lo-spin {
+    width: 28px; height: 28px;
+    border: 3px solid rgba(255,255,255,0.25);
     border-top-color: white;
     border-radius: 50%;
-    animation: spin 0.8s linear infinite;
+    animation: lo-spin 0.7s linear infinite;
     margin-top: 1.5rem;
   }
 
-  @keyframes spin {
-    to { transform: rotate(360deg); }
-  }
+  @keyframes lo-spin { to { transform: rotate(360deg); } }
 
   .scroll-hint {
     position: absolute;
@@ -1246,12 +1237,12 @@
 </footer>
 
 <!-- ════════════ LAUNCH OVERLAY ════════════ -->
-<div class="launch-overlay" id="launch-overlay">
-  <div class="circle"></div>
-  <div class="launch-content">
-    <div class="launch-logo">🩺 NoteRx</div>
-    <div class="launch-sub">正在启动 AI 诊断系统...</div>
-    <div class="launch-spinner"></div>
+<div id="launch-overlay">
+  <div class="lo-bg"></div>
+  <div class="lo-center">
+    <div class="lo-logo">NoteRx</div>
+    <div class="lo-sub">正在启动 AI 诊断系统...</div>
+    <div class="lo-spin"></div>
   </div>
 </div>
 
@@ -1261,20 +1252,36 @@
 function launchApp(e) {
   e.preventDefault();
   const overlay = document.getElementById('launch-overlay');
-  const circle = overlay.querySelector('.circle');
+  const bg = overlay.querySelector('.lo-bg');
 
-  // Position circle at click point
+  // Position the circle at click origin
   const rect = e.currentTarget.getBoundingClientRect();
-  circle.style.left = (rect.left + rect.width/2) + 'px';
-  circle.style.top = (rect.top + rect.height/2) + 'px';
+  const cx = rect.left + rect.width / 2;
+  const cy = rect.top + rect.height / 2;
+  bg.style.left = cx + 'px';
+  bg.style.top = cy + 'px';
 
-  overlay.classList.add('active');
+  // Scale needed: 100px circle must cover full viewport
+  // Diagonal of viewport / 50 (radius of 100px circle)
+  const diag = Math.sqrt(window.innerWidth ** 2 + window.innerHeight ** 2);
+  const maxDist = Math.max(
+    Math.sqrt(cx**2 + cy**2),
+    Math.sqrt((window.innerWidth-cx)**2 + cy**2),
+    Math.sqrt(cx**2 + (window.innerHeight-cy)**2),
+    Math.sqrt((window.innerWidth-cx)**2 + (window.innerHeight-cy)**2)
+  );
+  const scale = (maxDist * 2.2) / 50; // 50 = radius of 100px circle
+  bg.style.setProperty('--s', scale);
+  bg.style.transition = 'none';
+  bg.style.transform = 'translate(-50%,-50%) scale(0)';
 
-  // Navigate after animation completes
-  setTimeout(() => {
-    window.location.href = '/app';
-  }, 1100);
+  // Force reflow then animate
+  bg.offsetHeight;
+  bg.style.transition = 'transform 0.6s cubic-bezier(0.4, 0, 0, 1)';
+  bg.style.transform = 'translate(-50%,-50%) scale(' + scale + ')';
+  overlay.classList.add('go');
 
+  setTimeout(function() { window.location.href = '/app'; }, 1000);
   return false;
 }
 
