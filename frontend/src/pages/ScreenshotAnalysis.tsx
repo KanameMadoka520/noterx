@@ -42,6 +42,7 @@ const SLOTS: SlotConfig[] = [
 ];
 
 const LINK_REGEX = /https?:\/\/\S+/gi;
+const ORDERED_SLOT_KEYS: SlotType[] = ["cover", "content", "profile", "comments"];
 
 /**
  * 截图多维度分析页
@@ -87,6 +88,8 @@ export default function ScreenshotAnalysis() {
 
   const filledCount = Object.values(files).filter(Boolean).length;
   const canSubmit = filledCount >= 1 && !analyzing;
+  const currentGuideIndex = ORDERED_SLOT_KEYS.findIndex((key) => !files[key]);
+  const visibleGuideCount = currentGuideIndex === -1 ? ORDERED_SLOT_KEYS.length : currentGuideIndex + 1;
 
   const handleSubmit = async () => {
     if (!scenario) return;
@@ -246,12 +249,38 @@ export default function ScreenshotAnalysis() {
       <Box sx={{ maxWidth: 720, mx: "auto", px: 2, mt: 3 }}>
         <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35 }}>
           <Stack spacing={2}>
+            <Box sx={{ p: 2, borderRadius: "14px", bgcolor: "#fff", border: "1px solid #f0f0f0" }}>
+              <Typography sx={{ fontSize: 13, color: "#666", mb: 1 }}>
+                业务流程：选择模式 → 上传引导（封面/内容/主页/评论）→ 单图 AI 快识（主题标签）→ 深度分析
+              </Typography>
+              <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap" }}>
+                {ORDERED_SLOT_KEYS.map((key, idx) => {
+                  const done = Boolean(files[key]);
+                  const active = idx === currentGuideIndex || (currentGuideIndex === -1 && idx === ORDERED_SLOT_KEYS.length - 1);
+                  const label = SLOTS.find((s) => s.key === key)?.label ?? key;
+                  return (
+                    <Chip
+                      key={key}
+                      label={`${idx + 1}. ${label}`}
+                      size="small"
+                      sx={{
+                        bgcolor: done ? "#f0fdf4" : active ? "#fff0f1" : "#f5f5f5",
+                        color: done ? "#16a34a" : active ? "#ff2442" : "#999",
+                        fontWeight: done || active ? 600 : 500,
+                      }}
+                    />
+                  );
+                })}
+              </Box>
+            </Box>
+
             {/* 截图上传卡片 */}
-            {SLOTS.map((slot) => {
+            {SLOTS.filter((_, idx) => idx < visibleGuideCount).map((slot, idx) => {
               const file = files[slot.key];
               const preview = previews[slot.key];
               const recog = recognitions[slot.key];
               const isRecog = recognizing[slot.key];
+              const isLocked = idx > 0 && !files[ORDERED_SLOT_KEYS[idx - 1]];
 
               return (
                 <Box key={slot.key} sx={{ p: 2.5, borderRadius: "16px", bgcolor: "#fff", border: "1px solid #f0f0f0" }}>
@@ -260,6 +289,7 @@ export default function ScreenshotAnalysis() {
                     <Box sx={{ flex: 1 }}>
                       <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
                         <Typography sx={{ fontWeight: 600, fontSize: 14, color: "#262626" }}>{slot.label}</Typography>
+                        <Chip label={`步骤 ${idx + 1}`} size="small" sx={{ height: 20, fontSize: 11, bgcolor: "#f5f5f5", color: "#666" }} />
                         {slot.required && <Chip label="推荐" size="small" sx={{ height: 20, fontSize: 11, bgcolor: "#fff0f1", color: "#ff2442" }} />}
                       </Box>
                       <Typography sx={{ fontSize: 12, color: "#999" }}>{slot.desc}</Typography>
@@ -290,6 +320,7 @@ export default function ScreenshotAnalysis() {
                           ) : recog ? (
                             <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.75, alignItems: "center" }}>
                               <CheckCircleIcon sx={{ fontSize: 16, color: "#16a34a" }} />
+                              <Typography sx={{ fontSize: 12, color: "#16a34a", fontWeight: 600 }}>主题标签</Typography>
                               {recog.category && (
                                 <Chip label={recog.category} size="small" sx={{ height: 22, fontSize: 11, bgcolor: "#f0fdf4", color: "#16a34a", fontWeight: 600 }} />
                               )}
@@ -303,16 +334,22 @@ export default function ScreenshotAnalysis() {
                     ) : (
                       <motion.div key="empty" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
                         <Box
-                          onClick={() => inputRefs.current[slot.key]?.click()}
+                          onClick={() => {
+                            if (!isLocked) inputRefs.current[slot.key]?.click();
+                          }}
                           sx={{
                             border: "2px dashed #e0e0e0", borderRadius: "12px",
                             py: 3, display: "flex", flexDirection: "column", alignItems: "center",
                             cursor: "pointer", transition: "all 0.15s",
+                            opacity: isLocked ? 0.5 : 1,
+                            pointerEvents: isLocked ? "none" : "auto",
                             "&:hover": { borderColor: "#ff2442", bgcolor: "#fff5f6" },
                           }}
                         >
                           <CloudUploadIcon sx={{ fontSize: 28, color: "#ccc" }} />
-                          <Typography sx={{ fontSize: 13, color: "#999", mt: 0.5 }}>点击上传{slot.label}</Typography>
+                          <Typography sx={{ fontSize: 13, color: "#999", mt: 0.5 }}>
+                            {isLocked ? "请先完成上一步上传" : `点击上传${slot.label}`}
+                          </Typography>
                         </Box>
                       </motion.div>
                     )}

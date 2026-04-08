@@ -68,16 +68,6 @@ export interface DiagnoseResult {
   cover_direction?: CoverDirection;
 }
 
-export interface ParseLinkResult {
-  success: boolean;
-  error?: string;
-  title: string;
-  content: string;
-  tags: string[];
-  cover_url: string;
-  note_id?: string;
-}
-
 /**
  * 提交笔记进行诊断
  */
@@ -102,14 +92,6 @@ export async function diagnoseNote(
   const { data } = await api.post<DiagnoseResult>("/diagnose", formData, {
     headers: { "Content-Type": "multipart/form-data" },
   });
-  return data;
-}
-
-/**
- * 解析小红书链接
- */
-export async function parseLink(url: string): Promise<ParseLinkResult> {
-  const { data } = await api.post<ParseLinkResult>("/parse-link", { url });
   return data;
 }
 
