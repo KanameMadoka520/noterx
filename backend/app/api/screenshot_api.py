@@ -31,26 +31,20 @@ SLOT_LABELS = {
     "comments": "评论区截图",
 }
 
-_QUICK_PROMPT = """你是一个小红书内容理解助手，不是纯 OCR 抄写器。
-任务目标：先理解截图的业务语义，再做结构化提取。
+_QUICK_PROMPT = “””你是一个小红书内容理解助手。请快速分析这张截图。
 
-请按以下规则输出：
-1) 判断截图类型：cover/content/profile/comments/other。
-   - 只有当截图清晰展示“笔记详情页正文区域（标题+正文/标签）”时，才能判定为 content。
-   - 如果只是封面图、主页、评论区、发布选择页、图片预览页，一律不要判定为 content。
-2) 判断垂类 category（如穿搭、美食、数码、旅行、美妆、健身等）。
-3) title/content_text 只提取“对诊断有用”的关键信息：
-   - 能清晰看见就提取；
-   - 看不清或不可见就返回空字符串；
-   - 不要臆造、不要逐字硬抄整屏。
-   - 当 slot_type 不是 content 时，title 和 content_text 必须都为空字符串。
-   - 如果正文主要是标签（如 #话题A #话题B），这些标签应写入 content_text。
-   - 若是发布页截图，优先提取标题下方文案和标签区，不要把评论区当正文。
-4) summary 用 1-2 句概括“这张图对诊断的价值点”（例如情绪、卖点、互动信号、账号定位信号等）。
-5) confidence 为你对本次识别可信度的估计（0~1）。
+规则：
+1) 判断截图类型 slot_type：cover/content/profile/comments/other
+2) 判断垂类 category（穿搭、美食、数码、旅行、美妆、健身、生活、家居等）
+3) 提取标题 title：只要图中能看到任何标题文字就提取，看不到就空字符串
+4) 提取正文 content_text：只要图中能看到正文/描述文字就提取，看不到就空字符串
+5) summary：1-2句概括这张图的关键信息
+6) confidence：识别可信度 0~1
+
+重要：不管截图类型是什么，只要能看到标题或正文就必须提取！不要因为类型是 cover 就不提取标题。
 
 仅输出 JSON：
-{"slot_type": "cover|content|profile|comments|other", "category": "类别", "title": "标题或空字符串", "content_text": "正文或空字符串", "summary": "摘要", "confidence": 0.0-1.0}"""
+{“slot_type”: “cover|content|profile|comments|other”, “category”: “类别”, “title”: “标题或空字符串”, “content_text”: “正文或空字符串”, “summary”: “摘要”, “confidence”: 0.0-1.0}”””
 
 _DEEP_PROMPT_COVER = """分析这张封面截图的视觉吸引力，输出 JSON：
 {"visual_score": 0-100, "color_scheme": "配色描述", "composition": "构图评价", "text_overlay": "文字覆盖率评价", "suggestions": ["建议1", "建议2"]}"""
@@ -228,7 +222,7 @@ async def quick_recognize(
     quick_model = (os.getenv("LLM_MODEL_QUICK_RECOGNIZE") or "").strip() or os.getenv(
         "LLM_MODEL_OMNI", "mimo-v2-omni"
     )
-    quick_max_out = int(os.getenv("QUICK_RECOGNIZE_MAX_COMPLETION_TOKENS", "640"))
+    quick_max_out = int(os.getenv("QUICK_RECOGNIZE_MAX_COMPLETION_TOKENS", "1200"))
     ocr_cap = int(os.getenv("QUICK_RECOGNIZE_OCR_MAX_TOKENS", "512"))
 
     try:
