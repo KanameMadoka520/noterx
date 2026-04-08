@@ -271,18 +271,28 @@ export default function UploadZone({
               }}
               onClick={() => inputRef.current?.click()}
             >
-              <CloudUploadIcon
-                sx={{
-                  fontSize: compact ? 32 : 38,
-                  color: "primary.light",
-                  filter: "drop-shadow(0 2px 6px rgba(255,36,66,0.2))",
-                }}
-              />
-              <Typography sx={{ color: "text.primary", fontWeight: 600, fontSize: compact ? "0.8rem" : "0.85rem", mt: 0.5, textAlign: "center", letterSpacing: "0.01em" }}>
-                拖拽、点击或 Ctrl+V 上传（支持多选）
+              <Box sx={{
+                width: compact ? 48 : 56,
+                height: compact ? 48 : 56,
+                borderRadius: "16px",
+                bgcolor: "rgba(255,36,66,0.06)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                mb: 0.5,
+              }}>
+                <CloudUploadIcon
+                  sx={{
+                    fontSize: compact ? 26 : 30,
+                    color: "primary.main",
+                  }}
+                />
+              </Box>
+              <Typography sx={{ color: "text.primary", fontWeight: 700, fontSize: compact ? "0.82rem" : "0.88rem", mt: 0.25, textAlign: "center", letterSpacing: "0.01em" }}>
+                拖拽或点击上传
               </Typography>
-              <Typography sx={{ color: "text.secondary", opacity: 0.85, fontSize: compact ? "0.7rem" : "0.75rem", textAlign: "center", lineHeight: 1.55 }}>
-                图片（JPG/PNG/WebP，最多 {maxFiles} 张）或视频（MP4/MOV，1 个）
+              <Typography sx={{ color: "text.secondary", opacity: 0.75, fontSize: compact ? "0.7rem" : "0.74rem", textAlign: "center", lineHeight: 1.55, mt: 0.25 }}>
+                截图 / 视频 / Ctrl+V 粘贴 · 最多 {maxFiles} 个
               </Typography>
             </motion.div>
           )}

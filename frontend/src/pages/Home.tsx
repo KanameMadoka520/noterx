@@ -1,6 +1,6 @@
-﻿import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   Box, Typography, TextField, Button, Stack, Chip,
   CircularProgress, Alert, Paper, useTheme,
@@ -369,270 +369,48 @@ export default function Home() {
     comments: "评论区",
   };
 
-  const guideCard = (
-    <Box
-      sx={{
-        p: { xs: 1.5, md: 1.2 },
-        borderRadius: "14px",
-        flexShrink: 0,
-        background: "linear-gradient(145deg, rgba(250, 251, 255, 0.95) 0%, rgba(255, 255, 255, 0.98) 100%)",
-        border: "1px solid rgba(0, 0, 0, 0.08)",
-        boxShadow: "inset 0 1px 0 rgba(255, 255, 255, 0.88)",
-      }}
-    >
-      <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 1, mb: 0.9 }}>
-        <Typography sx={{ fontSize: { xs: 12, md: 11 }, color: "#111827", fontWeight: 700 }}>
-          一次上传自动分拣
-        </Typography>
-        <Chip
-          size="small"
-          label={`${files.length}/9`}
-          sx={{
-            height: 24,
-            fontSize: { xs: 10, md: 10 },
-            fontWeight: 700,
-            bgcolor: "rgba(37, 99, 235, 0.1)",
-            color: "#1d4ed8",
-            border: "1px solid rgba(37, 99, 235, 0.2)",
-          }}
-        />
-      </Box>
-      <Typography sx={{ fontSize: { xs: 12, md: 11 }, color: "#4b5563", lineHeight: 1.6 }}>
-        把视频和图片一次性上传，AI 会自动识别并区分封面、笔记详情、主页和评论区。
-      </Typography>
-      <Box sx={{ mt: 0.8, display: "flex", flexWrap: "wrap", gap: 0.7 }}>
-        {Object.entries(slotLabelMap).map(([slot, label]) => (
-          <Chip
-            key={slot}
-            size="small"
-            label={label}
-            color={recognizedSlots.has(slot) ? "success" : "default"}
-            variant={recognizedSlots.has(slot) ? "filled" : "outlined"}
-            sx={{ fontSize: 11, height: 24 }}
-          />
-        ))}
-      </Box>
-    </Box>
-  );
+  /* ── Step flow indicator ── */
+  const flowStep = files.length === 0 ? 0 : !allRecognitionDone ? 1 : 2;
+  const flowLabels = ["上传素材", "AI 识别", "开始诊断"];
 
-  const aiPanel = (
-    (processingStatus || anyLoading || successResults.length > 0 || allFailed || aiSuggestion) && (
+  return (
+    <Box sx={{
+      minHeight: "100dvh",
+      display: "flex",
+      flexDirection: "column",
+      background: "linear-gradient(168deg, #f8f6fa 0%, #eeedf2 40%, #f9f8fb 100%)",
+    }}>
+      {/* ── Header ── */}
       <Box
-        sx={{
-          p: { xs: 2, md: 1.35 },
-          borderRadius: "14px",
-          flexShrink: 0,
-          bgcolor: allFailed ? "rgba(254, 243, 199, 0.35)" : "rgba(248, 250, 252, 0.9)",
-          border: allFailed ? "1px solid rgba(245, 158, 11, 0.28)" : "1px solid rgba(0, 0, 0, 0.05)",
-          boxShadow: allFailed ? "inset 0 1px 0 rgba(255,255,255,0.6)" : "inset 0 1px 0 rgba(255,255,255,0.8)",
-          backdropFilter: "blur(8px)",
-        }}
-      >
-        {processingStatus && (
-          <Alert
-            severity={processingStatus.tone}
-            sx={{ mb: anyLoading || successResults.length > 0 || allFailed || aiSuggestion ? 1 : 0, py: 0 }}
-          >
-            <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 1 }}>
-              <Typography sx={{ fontSize: { xs: 12, md: 11 }, fontWeight: 700 }}>{processingStatus.label}</Typography>
-              <Typography sx={{ fontSize: { xs: 12, md: 11 }, color: "text.secondary" }}>{processingStatus.text}</Typography>
-            </Box>
-          </Alert>
-        )}
-        {anyLoading && (
-          <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: successResults.length > 0 ? 1 : 0 }}>
-            <CircularProgress size={14} thickness={5} sx={{ color: "#ff2442" }} />
-            <Typography sx={{ fontSize: { xs: 12, md: 11 }, color: "#999" }}>AI 正在识别标题、正文和内容类型...</Typography>
-          </Box>
-        )}
-        {allFailed && (
-          <Box>
-            <Typography sx={{ fontSize: { xs: 12, md: 11 }, fontWeight: 600, color: "#92400e", mb: 0.5 }}>
-              当前素材的 AI 快速识别全部失败
-            </Typography>
-            <Typography sx={{ fontSize: { xs: 12, md: 11 }, color: "#a16207", lineHeight: 1.65 }}>
-              常见原因是后端未启动或 Key 无效。请确认本机 `uvicorn` 在 `8000` 端口运行，并检查 `backend/.env` 中的 `OPENAI_API_KEY`。若暂时无法识别，也可手动补充后继续诊断。
-            </Typography>
-          </Box>
-        )}
-        {successResults.length > 0 && (
-          <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.75, mb: aiSuggestion ? 1 : 0 }}>
-            {successResults.map((r, i) => (
-              <Chip
-                key={i}
-                icon={<CheckCircleIcon sx={{ fontSize: 14 }} />}
-                label={r.category ? `${r.category}${r.summary ? ` 路 ${r.summary.slice(0, 20)}` : ""}` : r.summary?.slice(0, 30)}
-                size="small"
-                sx={{
-                  bgcolor: "rgba(16, 185, 129, 0.1)",
-                  color: "#047857",
-                  fontWeight: 600,
-                  fontSize: 11,
-                  border: "1px solid rgba(16, 185, 129, 0.2)",
-                  "& .MuiChip-icon": { color: "#059669" },
-                }}
-              />
-            ))}
-          </Box>
-        )}
-        {aiSuggestion && !allFailed && aiSuggestion.includes("未检测到笔记详情页截图") && (
-          <Alert severity="error" sx={{ mt: 0.5, fontWeight: 700, "& .MuiAlert-message": { fontSize: { xs: 13, md: 12 }, lineHeight: 1.6 } }}>
-            {aiSuggestion}
-          </Alert>
-        )}
-        {aiSuggestion && !allFailed && !aiSuggestion.includes("未检测到笔记详情页截图") && (
-          <Typography sx={{ fontSize: { xs: 12, md: 11 }, color: "#4b5563", lineHeight: 1.55 }}>
-            <Box component="span" sx={{ mr: 0.5, color: "#059669" }} aria-hidden>✓</Box>
-            {aiSuggestion}
-          </Typography>
-        )}
-      </Box>
-    )
-  );
-
-  const formFields = (
-    <Stack spacing={{ xs: 2.5, md: 1.5 }}>
-      <Box>
-        <TextField
-          label="笔记标题"
-          required
-          fullWidth
-          size={isDesktop ? "small" : "medium"}
-          disabled={lockInputs}
-          value={title}
-          onChange={(e) => { setTitle(e.target.value); setUserEdited((p) => ({ ...p, title: true })); }}
-          placeholder="上传后 AI 会自动识别，也可手动输入"
-          slotProps={{ htmlInput: { maxLength: 100 } }}
-          helperText={lockInputs ? "AI 处理中，识别完成后会自动回填标题" : autoFilled.title ? "✓ AI 已自动回填，可自行修改" : `${title.length}/100`}
-        />
-        {showWarnings && warnings.title && !title.trim() && !userEdited.title && (
-          <Alert severity="warning" icon={<WarningAmberIcon fontSize="small" />} sx={{ mt: 0.5, py: 0, fontSize: 11 }}>
-            AI 未从图片中识别到标题，请手动输入
-          </Alert>
-        )}
-      </Box>
-      <Box>
-        <TextField
-          label="笔记正文"
-          fullWidth
-          multiline
-          rows={isDesktop ? 3 : 4}
-          size={isDesktop ? "small" : "medium"}
-          disabled={lockInputs}
-          value={content}
-          onChange={(e) => { setContent(e.target.value); setUserEdited((p) => ({ ...p, content: true })); }}
-          placeholder="上传后 AI 会自动提取正文（包含标签）"
-          helperText={lockInputs ? "AI 处理中，识别完成后会自动回填正文" : autoFilled.content ? "✓ AI 已自动提取正文，可自行修改" : undefined}
-        />
-        {showWarnings && warnings.content && !content.trim() && !userEdited.content && (
-          <Alert severity="warning" icon={<WarningAmberIcon fontSize="small" />} sx={{ mt: 0.5, py: 0, fontSize: 11 }}>
-            AI 未提取到正文，可补充详情截图或手动输入
-          </Alert>
-        )}
-      </Box>
-      <Box>
-        <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: { xs: 1, md: 0.75 } }}>
-          <Typography sx={{ fontSize: { xs: 13, md: 12 }, color: "#999", fontWeight: 500 }}>选择垂类</Typography>
-          {autoFilled.category && (
-            <Chip
-              label="AI 已识别"
-              size="small"
-              sx={{
-                fontSize: 10,
-                height: 22,
-                fontWeight: 600,
-                bgcolor: "rgba(16, 185, 129, 0.12)",
-                color: "#047857",
-                border: "1px solid rgba(16, 185, 129, 0.22)",
-              }}
-            />
-          )}
-        </Box>
-        <CategoryPicker value={category} onChange={(v) => { setCategory(v); setUserEdited((p) => ({ ...p, category: true })); }} />
-        {showWarnings && warnings.category && !userEdited.category && (
-          <Alert severity="warning" icon={<WarningAmberIcon fontSize="small" />} sx={{ mt: 0.5, py: 0, fontSize: 11 }}>
-            AI 未识别垂类，请手动选择
-          </Alert>
-        )}
-      </Box>
-    </Stack>
-  );
-
-  const submitBtn = (
-    <Button
-      variant="contained"
-      fullWidth
-      disabled={!canSubmit}
-      onClick={handleSubmit}
-      sx={{
-        py: { xs: 1.4, md: 1.1 },
-        fontSize: { xs: "0.95rem", md: "0.9rem" },
-        fontWeight: 600,
-        borderRadius: "14px",
-        minHeight: { xs: 48, md: 44 },
-        flexShrink: 0,
-      }}
-    >
-      开始诊断
-    </Button>
-  );
-
-
-  /** 桌面布局 */
-  const desktopLayout = (
-    <Box
-      sx={{
-        height: "100dvh",
-        maxHeight: "100dvh",
-        display: "flex",
-        flexDirection: "column",
-        background: "linear-gradient(168deg, #f0eef2 0%, #e8eaef 38%, #f7f5f7 100%)",
-        overflow: "hidden",
-      }}
-    >
-      <Box
+        component="header"
         sx={{
           flexShrink: 0,
-          px: 2,
-          pt: 1.5,
-          pb: 1,
           display: "flex",
           alignItems: "center",
           justifyContent: "space-between",
-          gap: 2,
+          px: { xs: 2, md: 3 },
+          py: 1.5,
           borderBottom: "1px solid rgba(0,0,0,0.04)",
-          background: "linear-gradient(180deg, rgba(255,255,255,0.55) 0%, transparent 100%)",
-          backdropFilter: "blur(10px)",
+          bgcolor: "rgba(255,255,255,0.55)",
+          backdropFilter: "blur(12px)",
         }}
       >
-        <Box sx={{ display: "flex", alignItems: "center", gap: 1.25, minWidth: 0 }}>
-          <svg width="26" height="26" viewBox="0 0 28 28" fill="none" style={{ flexShrink: 0 }} aria-hidden>
+        <Box sx={{ display: "flex", alignItems: "center", gap: 1.25 }}>
+          <svg width="28" height="28" viewBox="0 0 28 28" fill="none" style={{ flexShrink: 0 }} aria-hidden>
             <defs>
-              <linearGradient id="homeLogoDesk" x1="4" y1="4" x2="26" y2="24" gradientUnits="userSpaceOnUse">
-                <stop stopColor="#ff5c6f" />
-                <stop offset="1" stopColor="#e61e3d" />
+              <linearGradient id="hLogo" x1="4" y1="4" x2="26" y2="24" gradientUnits="userSpaceOnUse">
+                <stop stopColor="#ff5c6f" /><stop offset="1" stopColor="#e61e3d" />
               </linearGradient>
             </defs>
-            <rect width="28" height="28" rx="7" fill="url(#homeLogoDesk)" />
-            <text x="14" y="19" textAnchor="middle" fill="#fff" fontSize="13" fontWeight="700" fontFamily="Inter, system-ui, sans-serif">Rx</text>
+            <rect width="28" height="28" rx="7" fill="url(#hLogo)" />
+            <text x="14" y="19" textAnchor="middle" fill="#fff" fontSize="13" fontWeight="700" fontFamily="Inter,system-ui,sans-serif">Rx</text>
           </svg>
-          <Box sx={{ minWidth: 0 }}>
-            <Typography
-              sx={{
-                fontSize: "1.05rem",
-                fontWeight: 800,
-                lineHeight: 1.2,
-                letterSpacing: "-0.02em",
-                background: "linear-gradient(90deg, #1a1a1a 0%, #404040 100%)",
-                backgroundClip: "text",
-                WebkitBackgroundClip: "text",
-                WebkitTextFillColor: "transparent",
-              }}
-            >
+          <Box>
+            <Typography sx={{ fontSize: "1.05rem", fontWeight: 800, letterSpacing: "-0.02em", color: "#1a1a1a" }}>
               薯医 NoteRx
             </Typography>
-            <Typography sx={{ fontSize: "0.72rem", color: "text.secondary", lineHeight: 1.35, opacity: 0.92 }}>
-              一次上传素材 → AI 自动识别 → 一键诊断
+            <Typography sx={{ fontSize: "0.7rem", color: "#888", lineHeight: 1.3 }}>
+              AI 笔记诊断 · 基于 874 条真实数据
             </Typography>
           </Box>
         </Box>
@@ -641,194 +419,349 @@ export default function Home() {
           onClick={() => navigate("/history")}
           size="small"
           sx={{
-            color: "text.secondary",
-            fontSize: 12,
-            fontWeight: 600,
-            flexShrink: 0,
-            borderRadius: "10px",
-            px: 1.25,
-            "&:hover": { color: "text.primary", bgcolor: "rgba(255,36,66,0.06)" },
+            color: "#888", fontSize: 12, fontWeight: 600, flexShrink: 0,
+            borderRadius: "10px", px: 1.25,
+            "&:hover": { color: "#1a1a1a", bgcolor: "rgba(255,36,66,0.06)" },
           }}
         >
           历史记录
         </Button>
       </Box>
 
+      {/* ── Main ── */}
       <Box
+        component={motion.div}
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4, ease: [0.4, 0, 0.2, 1] }}
         sx={{
           flex: 1,
-          minHeight: 0,
-          px: 2,
-          pb: 1.5,
           display: "flex",
-          justifyContent: "center",
-          alignItems: "stretch",
+          flexDirection: "column",
+          alignItems: "center",
+          px: { xs: 2, md: 2.5 },
+          py: { xs: 2, md: 1.5 },
+          overflow: "auto",
+          pb: { xs: 10, md: 2 },
         }}
       >
-        <Box
-          sx={{
-            width: "100%",
-            maxWidth: 1100,
-            display: "grid",
-            gridTemplateColumns: "1fr 1fr",
-            gap: 2,
-            minHeight: 0,
-          }}
-        >
+        {/* ── Step flow (mobile: horizontal, desktop: above grid) ── */}
+        <Box sx={{
+          display: "flex", alignItems: "center", gap: 0.5,
+          mb: { xs: 2, md: 2 }, width: "100%", maxWidth: 1060,
+          justifyContent: "center",
+        }}>
+          {flowLabels.map((label, i) => (
+            <Box key={i} sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
+              <Box sx={{
+                width: 22, height: 22, borderRadius: "50%",
+                display: "flex", alignItems: "center", justifyContent: "center",
+                fontSize: 11, fontWeight: 700,
+                bgcolor: i < flowStep ? "#10b981" : i === flowStep ? "#ff2442" : "rgba(0,0,0,0.06)",
+                color: i <= flowStep ? "#fff" : "#bbb",
+                transition: "all 0.3s ease",
+                boxShadow: i === flowStep ? "0 0 12px rgba(255,36,66,0.25)" : "none",
+              }}>
+                {i < flowStep ? (
+                  <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2 6l3 3 5-5" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                ) : (
+                  i + 1
+                )}
+              </Box>
+              <Typography sx={{
+                fontSize: 12, fontWeight: i === flowStep ? 700 : 500,
+                color: i <= flowStep ? "#262626" : "#bbb",
+                transition: "color 0.3s",
+              }}>
+                {label}
+              </Typography>
+              {i < flowLabels.length - 1 && (
+                <Box sx={{
+                  width: 20, height: 1.5, mx: 0.25,
+                  bgcolor: i < flowStep ? "#10b981" : "rgba(0,0,0,0.08)",
+                  borderRadius: 1, transition: "background-color 0.3s",
+                }} />
+              )}
+            </Box>
+          ))}
+        </Box>
+
+        {/* ── Grid ── */}
+        <Box sx={{
+          width: "100%",
+          maxWidth: 1060,
+          display: "grid",
+          gridTemplateColumns: { xs: "1fr", md: "1.15fr 1fr" },
+          gap: { xs: 2, md: 2.5 },
+          alignItems: "start",
+        }}>
+          {/* ── Left: Upload ── */}
           <Paper
             elevation={0}
             sx={{
-              borderRadius: "18px",
+              borderRadius: "20px",
               border: "1px solid rgba(255,255,255,0.85)",
-              p: 2,
+              p: { xs: 2.5, md: 2.5 },
+              bgcolor: "rgba(255,255,255,0.82)",
+              backdropFilter: "blur(16px)",
+              boxShadow: "0 8px 32px rgba(25,20,35,0.06), inset 0 1px 0 rgba(255,255,255,0.95)",
               display: "flex",
               flexDirection: "column",
               gap: 1.5,
-              minHeight: 0,
-              bgcolor: "rgba(255,255,255,0.78)",
-              backdropFilter: "blur(14px)",
-              boxShadow: "0 10px 40px rgba(25, 20, 35, 0.07), 0 1px 0 rgba(255,255,255,0.95) inset",
             }}
           >
-            {guideCard}
-            <Box sx={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
-              <UploadZone files={files} onFilesChange={handleFilesChange} maxFiles={9} compact />
+            <Box sx={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between" }}>
+              <Box>
+                <Typography sx={{ fontSize: 15, fontWeight: 700, color: "#1a1a1a" }}>
+                  上传笔记素材
+                </Typography>
+                <Typography sx={{ fontSize: 12, color: "#888", mt: 0.25, lineHeight: 1.5 }}>
+                  截图或视频拖入即可，AI 自动识别并回填标题、正文、分类
+                </Typography>
+              </Box>
+              <Chip
+                size="small"
+                label={`${files.length}/9`}
+                sx={{
+                  height: 24, fontSize: 10, fontWeight: 700,
+                  bgcolor: files.length > 0 ? "rgba(16,185,129,0.1)" : "rgba(37,99,235,0.1)",
+                  color: files.length > 0 ? "#059669" : "#1d4ed8",
+                  border: files.length > 0 ? "1px solid rgba(16,185,129,0.2)" : "1px solid rgba(37,99,235,0.2)",
+                  transition: "all 0.3s ease",
+                }}
+              />
             </Box>
+
+            <Box sx={{ flex: 1, minHeight: 0 }}>
+              <UploadZone files={files} onFilesChange={handleFilesChange} maxFiles={9} compact={isDesktop} />
+            </Box>
+
+            {/* Slot indicators */}
+            <AnimatePresence>
+              {files.length > 0 && (
+                <motion.div
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: "auto" }}
+                  exit={{ opacity: 0, height: 0 }}
+                  transition={{ duration: 0.25 }}
+                >
+                  <Box sx={{ display: "flex", gap: 0.75, flexWrap: "wrap" }}>
+                    {Object.entries(slotLabelMap).map(([slot, label]) => (
+                      <Chip
+                        key={slot} size="small" label={label}
+                        color={recognizedSlots.has(slot) ? "success" : "default"}
+                        variant={recognizedSlots.has(slot) ? "filled" : "outlined"}
+                        sx={{ fontSize: 11, height: 24, transition: "all 0.3s ease" }}
+                      />
+                    ))}
+                  </Box>
+                </motion.div>
+              )}
+            </AnimatePresence>
           </Paper>
 
+          {/* ── Right: Form ── */}
           <Paper
             elevation={0}
             sx={{
-              borderRadius: "18px",
+              borderRadius: "20px",
               border: "1px solid rgba(255,255,255,0.85)",
-              p: 2,
+              p: { xs: 2.5, md: 2.5 },
+              bgcolor: "rgba(255,255,255,0.82)",
+              backdropFilter: "blur(16px)",
+              boxShadow: "0 8px 32px rgba(25,20,35,0.06), inset 0 1px 0 rgba(255,255,255,0.95)",
               display: "flex",
               flexDirection: "column",
-              minHeight: 0,
-              bgcolor: "rgba(255,255,255,0.78)",
-              backdropFilter: "blur(14px)",
-              boxShadow: "0 10px 40px rgba(25, 20, 35, 0.07), 0 1px 0 rgba(255,255,255,0.95) inset",
+              gap: 1.75,
             }}
           >
-            <Typography
-              sx={{
-                fontSize: 13,
-                fontWeight: 700,
-                mb: 1,
-                flexShrink: 0,
-                letterSpacing: "0.02em",
-                color: "text.primary",
-                borderLeft: "3px solid",
-                borderColor: "primary.main",
-                pl: 1,
-                py: 0.25,
-              }}
-            >
+            <Typography sx={{
+              fontSize: 15, fontWeight: 700, color: "#1a1a1a",
+              borderLeft: "3px solid #ff2442", pl: 1, py: 0.25,
+            }}>
               笔记信息
             </Typography>
-            <Box sx={{ flex: 1, minHeight: 0, overflowY: "auto", pr: 0.5, display: "flex", flexDirection: "column", gap: 1.5 }}>
-              {aiPanel}
-              <Box sx={{ position: "relative" }}>
-                {isFormBlocked && (
-                  <Alert severity="info" sx={{ mb: 1 }}>
-                    AI 正在识别图片内容，识别完成后可编辑“笔记信息”。
-                  </Alert>
-                )}
-                <Box sx={{ opacity: isFormBlocked ? 0.5 : 1, pointerEvents: isFormBlocked ? "none" : "auto", transition: "opacity 0.2s ease" }}>
-                  {formFields}
-                </Box>
-              </Box>
-            </Box>
-            <Box sx={{ pt: 1.5, flexShrink: 0 }}>
-              {submitBtn}
-              {files.length > 0 && allRecognitionDone && !hasDetailScreenshot && (
-                <Alert severity="warning" sx={{ mt: 1 }}>
-                  建议补充笔记详情页截图，AI 提取效果更好。也可手动输入标题后直接诊断。
-                </Alert>
+
+            {/* AI Status */}
+            <AnimatePresence>
+              {(processingStatus || anyLoading || allFailed || successResults.length > 0) && (
+                <motion.div
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: "auto" }}
+                  exit={{ opacity: 0, height: 0 }}
+                  transition={{ duration: 0.3 }}
+                  style={{ overflow: "hidden" }}
+                >
+                  <Box sx={{
+                    p: 1.5, borderRadius: "12px",
+                    bgcolor: allFailed ? "rgba(254,243,199,0.35)" : "rgba(248,250,252,0.9)",
+                    border: allFailed ? "1px solid rgba(245,158,11,0.28)" : "1px solid rgba(0,0,0,0.05)",
+                    display: "flex", flexDirection: "column", gap: 0.75,
+                  }}>
+                    {processingStatus && (
+                      <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                        {processingStatus.tone === "info" && (
+                          <CircularProgress size={12} thickness={5} sx={{ color: "#ff2442" }} />
+                        )}
+                        {processingStatus.tone === "success" && (
+                          <CheckCircleIcon sx={{ fontSize: 14, color: "#059669" }} />
+                        )}
+                        <Typography sx={{
+                          fontSize: 12, fontWeight: 600,
+                          color: processingStatus.tone === "success" ? "#059669" : "#555",
+                        }}>
+                          {processingStatus.text}
+                        </Typography>
+                      </Box>
+                    )}
+                    {!processingStatus && anyLoading && (
+                      <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                        <CircularProgress size={12} thickness={5} sx={{ color: "#ff2442" }} />
+                        <Typography sx={{ fontSize: 12, color: "#999" }}>AI 正在识别...</Typography>
+                      </Box>
+                    )}
+                    {allFailed && (
+                      <Typography sx={{ fontSize: 12, color: "#92400e" }}>
+                        AI 识别失败，请检查后端配置或手动输入
+                      </Typography>
+                    )}
+                    {successResults.length > 0 && (
+                      <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5 }}>
+                        {successResults.map((r, i) => (
+                          <Chip key={i}
+                            icon={<CheckCircleIcon sx={{ fontSize: 12 }} />}
+                            label={r.category ? `${r.category}${r.summary ? ` · ${r.summary.slice(0, 20)}` : ""}` : r.summary?.slice(0, 20) || "已识别"}
+                            size="small"
+                            sx={{
+                              bgcolor: "rgba(16,185,129,0.1)", color: "#047857", fontWeight: 600,
+                              fontSize: 10, height: 22, border: "1px solid rgba(16,185,129,0.2)",
+                              "& .MuiChip-icon": { color: "#059669" },
+                            }}
+                          />
+                        ))}
+                      </Box>
+                    )}
+                  </Box>
+                </motion.div>
               )}
+            </AnimatePresence>
+
+            {/* Form */}
+            {isFormBlocked && (
+              <Alert severity="info" sx={{ py: 0.25 }}>
+                <Typography sx={{ fontSize: 12 }}>AI 正在识别，完成后可编辑</Typography>
+              </Alert>
+            )}
+
+            <Box sx={{
+              opacity: isFormBlocked ? 0.5 : 1,
+              pointerEvents: isFormBlocked ? "none" : "auto",
+              transition: "opacity 0.3s",
+            }}>
+              <Stack spacing={2}>
+                <Box>
+                  <TextField
+                    label="笔记标题" required fullWidth size="small"
+                    disabled={lockInputs} value={title}
+                    onChange={(e) => { setTitle(e.target.value); setUserEdited((p) => ({ ...p, title: true })); }}
+                    placeholder="上传后 AI 自动识别，也可手动输入"
+                    slotProps={{ htmlInput: { maxLength: 100 } }}
+                    helperText={lockInputs ? "AI 处理中" : autoFilled.title ? "AI 已自动回填，可修改" : `${title.length}/100`}
+                  />
+                  {showWarnings && warnings.title && !title.trim() && !userEdited.title && (
+                    <Alert severity="warning" icon={<WarningAmberIcon fontSize="small" />} sx={{ mt: 0.5, py: 0, fontSize: 11 }}>
+                      AI 未识别到标题，请手动输入
+                    </Alert>
+                  )}
+                </Box>
+                <Box>
+                  <TextField
+                    label="笔记正文" fullWidth multiline rows={isDesktop ? 3 : 4} size="small"
+                    disabled={lockInputs} value={content}
+                    onChange={(e) => { setContent(e.target.value); setUserEdited((p) => ({ ...p, content: true })); }}
+                    placeholder="上传后 AI 自动提取正文"
+                    helperText={lockInputs ? "AI 处理中" : autoFilled.content ? "AI 已自动提取，可修改" : undefined}
+                  />
+                  {showWarnings && warnings.content && !content.trim() && !userEdited.content && (
+                    <Alert severity="warning" icon={<WarningAmberIcon fontSize="small" />} sx={{ mt: 0.5, py: 0, fontSize: 11 }}>
+                      AI 未提取到正文，可补充截图或手动输入
+                    </Alert>
+                  )}
+                </Box>
+                <Box>
+                  <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 0.75 }}>
+                    <Typography sx={{ fontSize: 12, color: "#999", fontWeight: 500 }}>选择垂类</Typography>
+                    {autoFilled.category && (
+                      <Chip label="AI 已识别" size="small" sx={{
+                        fontSize: 10, height: 22, fontWeight: 600,
+                        bgcolor: "rgba(16,185,129,0.12)", color: "#047857",
+                        border: "1px solid rgba(16,185,129,0.22)",
+                      }} />
+                    )}
+                  </Box>
+                  <CategoryPicker value={category} onChange={(v) => { setCategory(v); setUserEdited((p) => ({ ...p, category: true })); }} />
+                  {showWarnings && warnings.category && !userEdited.category && (
+                    <Alert severity="warning" icon={<WarningAmberIcon fontSize="small" />} sx={{ mt: 0.5, py: 0, fontSize: 11 }}>
+                      AI 未识别垂类，请手动选择
+                    </Alert>
+                  )}
+                </Box>
+              </Stack>
             </Box>
+
+            {/* Submit (inline on desktop) */}
+            <Box sx={{ display: { xs: "none", md: "block" } }}>
+              <Button
+                variant="contained" fullWidth disabled={!canSubmit} onClick={handleSubmit}
+                sx={{ py: 1.25, fontSize: "0.9rem", fontWeight: 600, borderRadius: "14px", minHeight: 44 }}
+              >
+                开始诊断
+              </Button>
+            </Box>
+
+            {files.length > 0 && allRecognitionDone && !hasDetailScreenshot && (
+              <Alert severity="warning" sx={{ py: 0.25 }}>
+                <Typography sx={{ fontSize: 12, lineHeight: 1.5 }}>
+                  建议补充笔记详情页截图，也可手动输入后直接诊断。
+                </Typography>
+              </Alert>
+            )}
+
+            {aiSuggestion && !allFailed && !aiSuggestion.includes("补充笔记详情页截图") && (
+              <Typography sx={{ fontSize: 11, color: "#aaa", lineHeight: 1.5, textAlign: "center" }}>
+                {aiSuggestion}
+              </Typography>
+            )}
           </Paper>
         </Box>
       </Box>
 
-      <Typography sx={{ flexShrink: 0, textAlign: "center", pb: 1, fontSize: "0.65rem", color: "text.disabled", letterSpacing: "0.04em" }}>
-        薯医 NoteRx · AI 诊断仅供参考
-      </Typography>
-    </Box>
-  );
-
-  const mobileLayout = (
-    <Box
-      component={motion.div}
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      transition={{ duration: 0.35 }}
-      sx={{
-        minHeight: "100dvh",
-        background: "linear-gradient(180deg, #faf8fa 0%, #f3f1f5 55%, #faf9fb 100%)",
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
-        px: 2,
-        py: 3,
-        pb: 4,
-      }}
-    >
-      <Box sx={{ width: "100%", maxWidth: 520, display: "flex", justifyContent: "flex-end", mb: 1 }}>
+      {/* ── Mobile sticky bottom CTA ── */}
+      <Box sx={{
+        display: { xs: "block", md: "none" },
+        position: "fixed",
+        bottom: 0, left: 0, right: 0,
+        px: 2, py: 1.5,
+        bgcolor: "rgba(255,255,255,0.9)",
+        backdropFilter: "blur(16px)",
+        borderTop: "1px solid rgba(0,0,0,0.06)",
+        zIndex: 20,
+      }}>
         <Button
-          startIcon={<HistoryOutlined sx={{ fontSize: 16 }} />}
-          onClick={() => navigate("/history")}
-          sx={{
-            color: "text.secondary",
-            fontSize: 13,
-            fontWeight: 600,
-            borderRadius: "10px",
-            "&:hover": { color: "text.primary", bgcolor: "rgba(255,36,66,0.06)" },
-          }}
+          variant="contained" fullWidth disabled={!canSubmit} onClick={handleSubmit}
+          sx={{ py: 1.25, fontSize: "0.95rem", fontWeight: 700, borderRadius: "14px", minHeight: 48 }}
         >
-          历史记录
+          开始诊断
         </Button>
       </Box>
-      <Paper
-        elevation={0}
-        sx={{
-          width: "100%",
-          maxWidth: 520,
-          p: 2.5,
-          borderRadius: "20px",
-          border: "1px solid rgba(255,255,255,0.9)",
-          bgcolor: "rgba(255,255,255,0.82)",
-          backdropFilter: "blur(16px)",
-          boxShadow: "0 12px 48px rgba(25, 20, 35, 0.08), 0 1px 0 rgba(255,255,255,0.95) inset",
-        }}
-      >
-        <Stack spacing={2}>
-          {guideCard}
-          <UploadZone files={files} onFilesChange={handleFilesChange} maxFiles={9} />
-          {aiPanel}
-          <Box sx={{ position: "relative" }}>
-            {isFormBlocked && (
-              <Alert severity="info">
-                AI 正在识别图片内容，识别完成后可编辑“笔记信息”。
-              </Alert>
-            )}
-            <Box sx={{ opacity: isFormBlocked ? 0.5 : 1, pointerEvents: isFormBlocked ? "none" : "auto", transition: "opacity 0.2s ease", mt: isFormBlocked ? 1 : 0 }}>
-              {formFields}
-            </Box>
-          </Box>
-          {submitBtn}
-          {files.length > 0 && allRecognitionDone && !hasDetailScreenshot && (
-            <Alert severity="warning">
-              建议补充笔记详情页截图，AI 提取效果更好。也可手动输入标题后直接诊断。
-            </Alert>
-          )}
-        </Stack>
-      </Paper>
-      <Typography sx={{ mt: 3, fontSize: "0.72rem", color: "text.disabled", letterSpacing: "0.03em" }}>
+
+      {/* ── Footer (desktop only) ── */}
+      <Typography sx={{
+        display: { xs: "none", md: "block" },
+        textAlign: "center", py: 1.25, fontSize: 11, color: "#ccc", flexShrink: 0,
+      }}>
         薯医 NoteRx · AI 诊断仅供参考
       </Typography>
     </Box>
   );
-
-  return isDesktop ? desktopLayout : mobileLayout;
 }
