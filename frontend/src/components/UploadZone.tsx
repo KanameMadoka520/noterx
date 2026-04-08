@@ -1,10 +1,11 @@
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { Box, Typography, IconButton } from "@mui/material";
 import CloudUploadIcon from "@mui/icons-material/CloudUpload";
 import CloseIcon from "@mui/icons-material/Close";
 import { motion, AnimatePresence } from "framer-motion";
 
 interface UploadZoneProps {
+  file?: File | null;
   onFileSelect: (file: File | null) => void;
 }
 
@@ -20,7 +21,7 @@ const dashAnimation = `
 }
 `;
 
-export default function UploadZone({ onFileSelect }: UploadZoneProps) {
+export default function UploadZone({ file = null, onFileSelect }: UploadZoneProps) {
   const [preview, setPreview] = useState<string | null>(null);
   const [fileInfo, setFileInfo] = useState<{
     name: string;
@@ -72,6 +73,19 @@ export default function UploadZone({ onFileSelect }: UploadZoneProps) {
     },
     [handleFile]
   );
+
+  useEffect(() => {
+    if (!file) {
+      setPreview(null);
+      setFileInfo(null);
+      return;
+    }
+
+    setFileInfo({ name: file.name, size: file.size });
+    const reader = new FileReader();
+    reader.onload = (e) => setPreview(e.target?.result as string);
+    reader.readAsDataURL(file);
+  }, [file]);
 
   return (
     <>
