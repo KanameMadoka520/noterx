@@ -20,11 +20,66 @@ const STEPS = [
   "生成诊断报告",
 ];
 
+// Linear-style spinner component
+const LinearSpinner = () => (
+  <Box sx={{ position: "relative", width: 48, height: 48 }}>
+    <svg width="48" height="48" viewBox="0 0 48 48" style={{ transform: "rotate(-90deg)" }}>
+      {/* Track */}
+      <circle
+        cx="24"
+        cy="24"
+        r="20"
+        fill="none"
+        stroke="rgba(15, 23, 42, 0.08)"
+        strokeWidth="3"
+      />
+      {/* Animated arc */}
+      <motion.circle
+        cx="24"
+        cy="24"
+        r="20"
+        fill="none"
+        stroke="url(#gradient)"
+        strokeWidth="3"
+        strokeLinecap="round"
+        strokeDasharray="125.6"
+        animate={{
+          strokeDashoffset: [125.6, 31.4, 125.6],
+          rotate: [0, 360],
+        }}
+        transition={{
+          strokeDashoffset: {
+            duration: 2,
+            repeat: Infinity,
+            ease: "easeInOut",
+          },
+          rotate: {
+            duration: 3,
+            repeat: Infinity,
+            ease: "linear",
+          },
+        }}
+        style={{ transformOrigin: "center" }}
+      />
+      <defs>
+        <linearGradient id="gradient" x1="0%" y1="0%" x2="100%" y2="0%">
+          <stop offset="0%" stopColor="#7c3aed" />
+          <stop offset="100%" stopColor="#8b5cf6" />
+        </linearGradient>
+      </defs>
+    </svg>
+  </Box>
+);
+
 export default function Diagnosing() {
   const location = useLocation();
   const navigate = useNavigate();
   const params = location.state as {
-    title: string; content: string; tags: string; category: string; coverFile: File | null;
+    title: string;
+    content: string;
+    tags: string;
+    category: string;
+    coverFile: File | null;
   } | null;
 
   const [step, setStep] = useState(0);
@@ -32,14 +87,19 @@ export default function Diagnosing() {
   const resultRef = useRef<{ report: unknown; isFallback: boolean } | null>(null);
 
   useEffect(() => {
-    if (!params) { navigate("/"); return; }
+    if (!params) {
+      navigate("/");
+      return;
+    }
     let cancelled = false;
 
     (async () => {
       try {
         const result = await diagnoseNote({
-          title: params.title, content: params.content,
-          category: params.category, tags: params.tags,
+          title: params.title,
+          content: params.content,
+          category: params.category,
+          tags: params.tags,
           coverImage: params.coverFile ?? undefined,
         });
         resultRef.current = { report: result, isFallback: false };
@@ -61,7 +121,13 @@ export default function Diagnosing() {
           clearInterval(timer);
           setTimeout(() => {
             if (!cancelled && resultRef.current)
-              navigate("/report", { state: { report: resultRef.current.report, params, isFallback: resultRef.current.isFallback } });
+              navigate("/report", {
+                state: {
+                  report: resultRef.current.report,
+                  params,
+                  isFallback: resultRef.current.isFallback,
+                },
+              });
           }, 600);
           return STEPS.length - 1;
         }
@@ -71,7 +137,10 @@ export default function Diagnosing() {
       });
     }, 2800);
 
-    return () => { cancelled = true; clearInterval(timer); };
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!params) return null;
@@ -79,58 +148,121 @@ export default function Diagnosing() {
   const progress = ((step + 1) / STEPS.length) * 100;
 
   return (
-    <Box sx={{ position: "fixed", inset: 0, bgcolor: "#fafafa", display: "flex", alignItems: "center", justifyContent: "center" }}>
-      <Box sx={{ width: "100%", maxWidth: 360, px: 3, textAlign: "center" }}>
-        {/* Animated loader */}
-        <Box sx={{ mb: 3, display: "flex", justifyContent: "center" }}>
-          <svg width="40" height="40" viewBox="0 0 40 40">
-            <circle cx="20" cy="20" r="16" fill="none" stroke="#f0f0f0" strokeWidth="3" />
-            <motion.circle
-              cx="20" cy="20" r="16" fill="none" stroke="#ff2442" strokeWidth="3"
-              strokeLinecap="round"
-              strokeDasharray="100"
-              animate={{ strokeDashoffset: [100, 0, 100], rotate: [0, 360, 720] }}
-              transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
-              style={{ transformOrigin: "center" }}
-            />
-          </svg>
+    <Box
+      sx={{
+        position: "fixed",
+        inset: 0,
+        background: "linear-gradient(180deg, #fafafa 0%, #f1f5f9 100%)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        px: 3,
+      }}
+    >
+      <Box sx={{ width: "100%", maxWidth: 400, textAlign: "center" }}>
+        {/* Spinner */}
+        <Box sx={{ mb: 4, display: "flex", justifyContent: "center" }}>
+          <LinearSpinner />
         </Box>
 
-        {/* Step label */}
-        <AnimatePresence mode="wait">
-          <motion.div
-            key={step}
-            initial={{ opacity: 0, y: 6 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -6 }}
-            transition={{ duration: 0.25 }}
-          >
-            <Typography sx={{ fontSize: 15, color: "#262626", fontWeight: 500 }}>
-              {STEPS[step]}
-            </Typography>
-          </motion.div>
-        </AnimatePresence>
+        {/* Step label with AnimatePresence */}
+        <Box sx={{ height: 32, mb: 3 }}>
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={step}
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -8 }}
+              transition={{ duration: 0.25, ease: [0.4, 0, 0.2, 1] }}
+            >
+              <Typography
+                sx={{
+                  fontSize: "1.0625rem",
+                  color: "text.primary",
+                  fontWeight: 500,
+                  letterSpacing: "-0.01em",
+                }}
+              >
+                {STEPS[step]}
+              </Typography>
+            </motion.div>
+          </AnimatePresence>
+        </Box>
 
         {/* Progress bar */}
-        <Box sx={{ mt: 3, mb: 1.5, height: 3, bgcolor: "#f0f0f0", borderRadius: 2, overflow: "hidden" }}>
-          <Box
-            sx={{
+        <Box
+          sx={{
+            height: 4,
+            bgcolor: "rgba(15, 23, 42, 0.06)",
+            borderRadius: 2,
+            overflow: "hidden",
+            mb: 3,
+          }}
+        >
+          <motion.div
+            style={{
               height: "100%",
-              bgcolor: "#ff2442",
               borderRadius: 2,
-              width: `${progress}%`,
-              transition: "width 0.6s cubic-bezier(0.4,0,0.2,1)",
+              background: "linear-gradient(90deg, #7c3aed 0%, #8b5cf6 100%)",
             }}
+            initial={{ width: 0 }}
+            animate={{ width: `${progress}%` }}
+            transition={{ duration: 0.6, ease: [0.4, 0, 0.2, 1] }}
           />
         </Box>
 
-        {/* Step counter + title */}
-        <Typography sx={{ fontSize: 12, color: "#bbb" }}>
+        {/* Step counter */}
+        <Typography
+          sx={{
+            fontSize: "0.8125rem",
+            fontWeight: 500,
+            color: "text.tertiary",
+            mb: 1,
+          }}
+        >
           {step + 1} / {STEPS.length}
         </Typography>
-        <Typography sx={{ fontSize: 12, color: "#bbb", mt: 0.5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+
+        {/* Title preview */}
+        <Typography
+          sx={{
+            fontSize: "0.875rem",
+            color: "text.secondary",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+            px: 2,
+          }}
+        >
           {params.title || "截图识别中"}
         </Typography>
+
+        {/* Decorative dots */}
+        <Box
+          sx={{
+            display: "flex",
+            justifyContent: "center",
+            gap: 0.5,
+            mt: 6,
+          }}
+        >
+          {[0, 1, 2].map((i) => (
+            <motion.div
+              key={i}
+              style={{
+                width: 6,
+                height: 6,
+                borderRadius: "50%",
+                background: i === 0 ? "#7c3aed" : "rgba(15, 23, 42, 0.15)",
+              }}
+              animate={{
+                background: step % 3 === i ? "#7c3aed" : "rgba(15, 23, 42, 0.15)",
+                scale: step % 3 === i ? 1.2 : 1,
+              }}
+              transition={{ duration: 0.3 }}
+            />
+          ))}
+        </Box>
       </Box>
     </Box>
   );

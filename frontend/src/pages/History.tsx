@@ -20,6 +20,7 @@ import {
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import DeleteIcon from "@mui/icons-material/Delete";
 import HistoryIcon from "@mui/icons-material/History";
+import { motion } from "framer-motion";
 import {
   getHistoryList,
   getHistoryDetail,
@@ -39,15 +40,20 @@ const CATEGORY_LABEL: Record<string, string> = {
 
 const GRADE_COLOR: Record<string, string> = {
   S: "#10b981",
-  A: "#14b8a6",
-  B: "#3b82f6",
+  A: "#3b82f6",
+  B: "#8b5cf6",
   C: "#f59e0b",
   D: "#ef4444",
 };
 
-/**
- * 历史记录页
- */
+const GRADE_BG: Record<string, string> = {
+  S: "rgba(16, 185, 129, 0.08)",
+  A: "rgba(59, 130, 246, 0.08)",
+  B: "rgba(139, 92, 246, 0.08)",
+  C: "rgba(245, 158, 11, 0.08)",
+  D: "rgba(239, 68, 68, 0.08)",
+};
+
 export default function History() {
   const navigate = useNavigate();
   const [items, setItems] = useState<HistoryListItem[]>([]);
@@ -71,7 +77,6 @@ export default function History() {
     fetchList();
   }, []);
 
-  /** 点击卡片：加载完整报告后跳转 Report 页 */
   const handleOpen = async (item: HistoryListItem) => {
     setNavigating(item.id);
     try {
@@ -89,7 +94,6 @@ export default function History() {
     }
   };
 
-  /** 确认删除 */
   const handleDelete = async () => {
     if (!deleteTarget) return;
     try {
@@ -113,24 +117,16 @@ export default function History() {
   };
 
   return (
-    <Box
-      sx={{
-        minHeight: "100vh",
-        background:
-          "linear-gradient(160deg, #ecfdf5 0%, #ffffff 50%, #f0fdfa 100%)",
-        pb: 10,
-      }}
-    >
-      {/* 顶栏 */}
+    <Box sx={{ minHeight: "100vh", bgcolor: "background.default", pb: 10 }}>
+      {/* Header */}
       <Box
         sx={{
           position: "sticky",
           top: 0,
           zIndex: 10,
-          bgcolor: "rgba(255,255,255,0.85)",
+          bgcolor: "rgba(255, 255, 255, 0.85)",
           backdropFilter: "blur(12px)",
-          borderBottom: "1px solid",
-          borderColor: "divider",
+          borderBottom: "1px solid rgba(15, 23, 42, 0.08)",
         }}
       >
         <Box
@@ -145,40 +141,77 @@ export default function History() {
           }}
         >
           <Button
-            startIcon={<ArrowBackIcon />}
+            startIcon={<ArrowBackIcon sx={{ fontSize: 20 }} />}
             onClick={() => navigate("/")}
-            size="small"
-            color="inherit"
+            sx={{
+              color: "text.secondary",
+              fontWeight: 500,
+              fontSize: "0.875rem",
+              textTransform: "none",
+              "&:hover": { color: "text.primary", backgroundColor: "rgba(15, 23, 42, 0.04)" }
+            }}
           >
             首页
           </Button>
-          <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
-            <HistoryIcon color="primary" />
-            <Typography sx={{ fontWeight: 700 }} color="primary">
+          <Box sx={{ display: "flex", alignItems: "center", gap: 0.75 }}>
+            <HistoryIcon sx={{ color: "primary.main", fontSize: 20 }} />
+            <Typography sx={{ fontWeight: 600, fontSize: "1rem", color: "text.primary", letterSpacing: "-0.01em" }}>
               诊断历史
             </Typography>
           </Box>
-          <Box sx={{ width: 64 }} />
+          <Box sx={{ width: 80 }} />
         </Box>
       </Box>
 
-      <Box sx={{ maxWidth: 720, mx: "auto", px: 2, mt: 3 }}>
+      <Box sx={{ maxWidth: 720, mx: "auto", px: 2, mt: 4 }}>
         {loading ? (
-          <Box sx={{ textAlign: "center", py: 10 }}>
-            <CircularProgress color="primary" />
-            <Typography color="text.secondary" sx={{ mt: 2 }}>
+          <Box sx={{ textAlign: "center", py: 12 }}>
+            <CircularProgress size={28} sx={{ color: "primary.main" }} />
+            <Typography sx={{ mt: 2.5, color: "text.secondary", fontSize: "0.875rem" }}>
               加载中...
             </Typography>
           </Box>
         ) : items.length === 0 ? (
-          <Box sx={{ textAlign: "center", py: 10 }}>
-            <Typography fontSize={48}>📋</Typography>
-            <Typography color="text.secondary" sx={{ mt: 1 }}>
+          <Box sx={{ textAlign: "center", py: 12 }}>
+            <Box
+              sx={{
+                width: 80,
+                height: 80,
+                borderRadius: "24px",
+                bgcolor: "rgba(15, 23, 42, 0.04)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                mx: "auto",
+                mb: 3,
+                fontSize: "2rem",
+              }}
+            >
+              📝
+            </Box>
+            <Typography sx={{ color: "text.secondary", fontSize: "0.9375rem", fontWeight: 500 }}>
               暂无诊断记录
+            </Typography>
+            <Typography sx={{ color: "text.tertiary", fontSize: "0.8125rem", mt: 0.5 }}>
+              完成一次诊断后会在这里出现
             </Typography>
             <Button
               variant="contained"
-              sx={{ mt: 3 }}
+              sx={{ 
+                mt: 3.5,
+                px: 3,
+                py: 1,
+                borderRadius: 2,
+                fontWeight: 600,
+                background: "linear-gradient(135deg, #7c3aed 0%, #8b5cf6 100%)",
+                boxShadow: "0 4px 14px rgba(124, 58, 237, 0.3)",
+                "&:hover": {
+                  background: "linear-gradient(135deg, #6d28d9 0%, #7c3aed 100%)",
+                  boxShadow: "0 6px 20px rgba(124, 58, 237, 0.4)",
+                  transform: "translateY(-1px)",
+                },
+                transition: "all 0.2s ease",
+              }}
               onClick={() => navigate("/")}
             >
               去诊断一篇笔记
@@ -186,137 +219,203 @@ export default function History() {
           </Box>
         ) : (
           <Stack spacing={2}>
-            {items.map((item) => (
-              <Card key={item.id} sx={{ position: "relative" }}>
-                <CardActionArea
-                  onClick={() => handleOpen(item)}
-                  disabled={navigating === item.id}
+            {items.map((item, index) => (
+              <motion.div
+                key={item.id}
+                initial={{ opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.35, delay: index * 0.05, ease: [0.4, 0, 0.2, 1] }}
+              >
+                <Card
+                  elevation={0}
+                  sx={{
+                    border: "1px solid rgba(15, 23, 42, 0.08)",
+                    borderRadius: 3,
+                    overflow: "hidden",
+                    transition: "all 0.2s ease",
+                    position: "relative",
+                    "&:hover": {
+                      borderColor: "rgba(124, 58, 237, 0.25)",
+                      boxShadow: "0 4px 12px rgba(15, 23, 42, 0.08)",
+                      transform: "translateY(-1px)",
+                    },
+                  }}
                 >
-                  <CardContent
-                    sx={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 2,
-                      pr: 7,
-                    }}
+                  <CardActionArea
+                    onClick={() => handleOpen(item)}
+                    disabled={navigating === item.id}
+                    sx={{ p: 0 }}
                   >
-                    {/* 评分圆 */}
-                    <Box
+                    <CardContent
                       sx={{
-                        width: 56,
-                        height: 56,
-                        borderRadius: "50%",
-                        flexShrink: 0,
                         display: "flex",
-                        flexDirection: "column",
                         alignItems: "center",
-                        justifyContent: "center",
-                        background: `linear-gradient(135deg, ${GRADE_COLOR[item.grade] || "#999"}22, ${GRADE_COLOR[item.grade] || "#999"}11)`,
-                        border: `2px solid ${GRADE_COLOR[item.grade] || "#ccc"}`,
+                        gap: 2.5,
+                        p: 2.5,
+                        pr: 8,
+                        "&:last-child": { pb: 2.5 },
                       }}
                     >
-                      <Typography
-                        sx={{
-                          fontWeight: 800,
-                          fontSize: 18,
-                          color: GRADE_COLOR[item.grade] || "#666",
-                          lineHeight: 1,
-                        }}
-                      >
-                        {Math.round(item.overall_score)}
-                      </Typography>
-                      <Typography
-                        sx={{
-                          fontSize: 11,
-                          fontWeight: 700,
-                          color: GRADE_COLOR[item.grade] || "#666",
-                          lineHeight: 1,
-                          mt: 0.2,
-                        }}
-                      >
-                        {item.grade}
-                      </Typography>
-                    </Box>
-
-                    {/* 文本区 */}
-                    <Box sx={{ flex: 1, minWidth: 0 }}>
-                      <Typography
-                        variant="subtitle1"
-                        fontWeight={600}
-                        sx={{
-                          overflow: "hidden",
-                          textOverflow: "ellipsis",
-                          whiteSpace: "nowrap",
-                        }}
-                      >
-                        {item.title}
-                      </Typography>
+                      {/* Grade Badge */}
                       <Box
                         sx={{
+                          width: 56,
+                          height: 56,
+                          borderRadius: "14px",
+                          flexShrink: 0,
                           display: "flex",
+                          flexDirection: "column",
                           alignItems: "center",
-                          gap: 1,
-                          mt: 0.5,
+                          justifyContent: "center",
+                          background: GRADE_BG[item.grade] || "rgba(15, 23, 42, 0.04)",
+                          border: `2px solid ${GRADE_COLOR[item.grade] || "rgba(15, 23, 42, 0.12)"}30`,
+                          transition: "all 0.2s ease",
                         }}
                       >
-                        <Chip
-                          label={
-                            CATEGORY_LABEL[item.category] || item.category
-                          }
-                          size="small"
-                          variant="outlined"
-                          sx={{ height: 22, fontSize: 12 }}
-                        />
-                        <Typography variant="caption" color="text.secondary">
-                          {formatTime(item.created_at)}
+                        <Typography
+                          sx={{
+                            fontWeight: 700,
+                            fontSize: "1.125rem",
+                            color: GRADE_COLOR[item.grade] || "text.secondary",
+                            lineHeight: 1,
+                            letterSpacing: "-0.02em",
+                          }}
+                        >
+                          {Math.round(item.overall_score)}
+                        </Typography>
+                        <Typography
+                          sx={{
+                            fontSize: "0.6875rem",
+                            fontWeight: 700,
+                            color: GRADE_COLOR[item.grade] || "text.tertiary",
+                            mt: 0.25,
+                            letterSpacing: "0.025em",
+                          }}
+                        >
+                          {item.grade}
                         </Typography>
                       </Box>
-                    </Box>
 
-                    {navigating === item.id && (
-                      <CircularProgress size={20} sx={{ ml: 1 }} />
-                    )}
-                  </CardContent>
-                </CardActionArea>
+                      {/* Text Content */}
+                      <Box sx={{ flex: 1, minWidth: 0 }}>
+                        <Typography
+                          sx={{
+                            fontSize: "0.9375rem",
+                            fontWeight: 600,
+                            color: "text.primary",
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                            whiteSpace: "nowrap",
+                            lineHeight: 1.4,
+                            letterSpacing: "-0.01em",
+                          }}
+                        >
+                          {item.title}
+                        </Typography>
+                        <Box
+                          sx={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 1.25,
+                            mt: 0.75,
+                          }}
+                        >
+                          <Chip
+                            label={CATEGORY_LABEL[item.category] || item.category}
+                            size="small"
+                            sx={{
+                              height: 22,
+                              fontSize: "0.75rem",
+                              fontWeight: 500,
+                              color: "text.secondary",
+                              bgcolor: "rgba(15, 23, 42, 0.05)",
+                              border: "none",
+                              borderRadius: 1,
+                            }}
+                          />
+                          <Typography variant="caption" sx={{ color: "text.tertiary", fontSize: "0.75rem" }}>
+                            {formatTime(item.created_at)}
+                          </Typography>
+                        </Box>
+                      </Box>
 
-                {/* 删除按钮 */}
-                <IconButton
-                  size="small"
-                  sx={{
-                    position: "absolute",
-                    right: 8,
-                    top: "50%",
-                    transform: "translateY(-50%)",
-                    color: "text.disabled",
-                    "&:hover": { color: "error.main" },
-                  }}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setDeleteTarget(item);
-                  }}
-                >
-                  <DeleteIcon fontSize="small" />
-                </IconButton>
-              </Card>
+                      {/* Loading indicator */}
+                      {navigating === item.id && (
+                        <CircularProgress size={20} sx={{ color: "primary.main" }} />
+                      )}
+                    </CardContent>
+                  </CardActionArea>
+
+                  {/* Delete button */}
+                  <IconButton
+                    size="small"
+                    sx={{
+                      position: "absolute",
+                      right: 12,
+                      top: "50%",
+                      transform: "translateY(-50%)",
+                      color: "text.tertiary",
+                      width: 36,
+                      height: 36,
+                      "&:hover": { 
+                        color: "error.main",
+                        backgroundColor: "rgba(239, 68, 68, 0.08)",
+                      },
+                    }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setDeleteTarget(item);
+                    }}
+                  >
+                    <DeleteIcon sx={{ fontSize: 18 }} />
+                  </IconButton>
+                </Card>
+              </motion.div>
             ))}
           </Stack>
         )}
       </Box>
 
-      {/* 删除确认对话框 */}
+      {/* Delete Dialog */}
       <Dialog
         open={!!deleteTarget}
         onClose={() => setDeleteTarget(null)}
+        PaperProps={{
+          sx: {
+            borderRadius: 3,
+            boxShadow: "0 25px 50px -12px rgba(15, 23, 42, 0.15)",
+          }
+        }}
       >
-        <DialogTitle>删除记录</DialogTitle>
+        <DialogTitle sx={{ pb: 1, fontWeight: 600, fontSize: "1.0625rem" }}>
+          删除记录
+        </DialogTitle>
         <DialogContent>
-          <DialogContentText>
+          <DialogContentText sx={{ color: "text.secondary", fontSize: "0.875rem" }}>
             确定删除「{deleteTarget?.title}」的诊断记录吗？此操作不可恢复。
           </DialogContentText>
         </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setDeleteTarget(null)}>取消</Button>
-          <Button onClick={handleDelete} color="error">
+        <DialogActions sx={{ px: 3, pb: 2.5 }}>
+          <Button 
+            onClick={() => setDeleteTarget(null)}
+            sx={{ 
+              color: "text.secondary",
+              fontWeight: 500,
+              "&:hover": { backgroundColor: "rgba(15, 23, 42, 0.04)" }
+            }}
+          >
+            取消
+          </Button>
+          <Button 
+            onClick={handleDelete} 
+            color="error"
+            variant="contained"
+            sx={{ 
+              fontWeight: 600,
+              boxShadow: "none",
+              "&:hover": { boxShadow: "0 4px 12px rgba(239, 68, 68, 0.3)" }
+            }}
+          >
             删除
           </Button>
         </DialogActions>
