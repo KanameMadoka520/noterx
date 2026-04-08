@@ -40,6 +40,24 @@ const STEPS = [
   { label: "生成诊断报告", desc: "整合评分、建议与优化方案" },
 ];
 
+const EVENT_STEP_MAP: Record<string, number> = {
+  parse_start: 1,
+  parse_done: 2,
+  baseline_start: 3,
+  baseline_done: 3,
+  round1_start: 4,
+  round1_content_done: 4,
+  round1_visual_done: 5,
+  round1_growth_done: 6,
+  round1_user_done: 7,
+  round1_done: 8,
+  debate_start: 8,
+  debate_done: 9,
+  judge_start: 9,
+  judge_done: 10,
+  finalizing: 10,
+};
+
 /* ── Tips per category ── */
 const TIPS: Record<string, string[]> = {
   food: [
@@ -127,6 +145,7 @@ export default function Diagnosing() {
   const [preScoreData, setPreScoreData] = useState<PreScoreResult | null>(null);
   const [streamMsg, setStreamMsg] = useState<string>("");
   const apiDone = useRef(false);
+  const hasRealtimeProgress = useRef(false);
   const resultRef = useRef<{ report: unknown; isFallback: boolean } | null>(null);
 
   const tips = (params ? TIPS[params.category] : null) || TIPS._default;
@@ -164,9 +183,12 @@ export default function Diagnosing() {
               setPreScoreData(event.data as unknown as PreScoreResult);
               setStep(1);
             } else if (event.type === "progress") {
+              hasRealtimeProgress.current = true;
               setStreamMsg(event.data.message);
-              if (event.data.step === "agents_start") setStep(4);
-              if (event.data.step === "agents_done") setStep(9);
+              const mapped = EVENT_STEP_MAP[event.data.step];
+              if (mapped !== undefined) {
+                setStep((prev) => Math.max(prev, mapped));
+              }
             } else if (event.type === "result") {
               resultRef.current = { report: event.data, isFallback: false };
               apiDone.current = true;
@@ -218,6 +240,7 @@ export default function Diagnosing() {
           }, 600);
           return STEPS.length - 1;
         }
+        if (hasRealtimeProgress.current) return prev;
         if (prev >= STEPS.length - 1) return prev;
         if (!apiDone.current && prev >= STEPS.length - 2) return prev;
         return prev + 1;

@@ -10,7 +10,7 @@ import json
 import logging
 import os
 import time
-from typing import Optional
+from typing import Optional, Callable, Awaitable, Any
 
 from app.analysis.text_analyzer import TextAnalyzer
 from app.analysis.image_analyzer import ImageAnalyzer
@@ -98,10 +98,22 @@ class Orchestrator:
         tags: list[str],
         cover_image: Optional[bytes] = None,
         video_analysis: Optional[dict] = None,
+        progress_cb: Optional[Callable[[str, str], Awaitable[Any] | Any]] = None,
     ) -> dict:
         t0 = time.time()
 
+        async def _emit_progress(step: str, message: str) -> None:
+            if progress_cb is None:
+                return
+            try:
+                ret = progress_cb(step, message)
+                if asyncio.iscoroutine(ret):
+                    await ret
+            except Exception as e:
+                logger.warning("progress callback failed (%s): %s", step, e)
+
         # --- Step 1: 多模态内容解析 ---
+        await _emit_progress("parse_start", "正在解析标题、正文与基础素材...")
         title_analysis = self.text_analyzer.analyze_title(title)
         content_analysis = self.text_analyzer.analyze_content(content)
 
@@ -110,8 +122,10 @@ class Orchestrator:
             image_analysis = self.image_analyzer.analyze(cover_image)
 
         logger.info("解析耗时 %.1fs", time.time() - t0)
+        await _emit_progress("parse_done", "内容与素材解析完成")
 
         # --- Step 2: Baseline 对比 ---
+        await _emit_progress("baseline_start", "正在进行同类基线对比与预评分...")
         note_features = {
             "title_length": title_analysis["length"],
             "tag_count": len(tags),
@@ -140,8 +154,10 @@ class Orchestrator:
         )
         baseline_comparison["model_a_pre_score"] = model_a_score
         logger.info("Model A 预评分: %.1f (%s)", model_a_score["total_score"], model_a_score["level"])
+        await _emit_progress("baseline_done", "基线对比完成，开始专家诊断")
 
         # --- Step 3: 并行 Agent 诊断（Round 1）---
+        await _emit_progress("round1_start", "4位专家正在并行诊断...")
         t1 = time.time()
         content_agent = ContentAgent(model=MODEL_PRO)
         visual_agent = VisualAgent(model=MODEL_PRO)
@@ -172,7 +188,20 @@ class Orchestrator:
         opinions = await asyncio.gather(*round1_tasks, return_exceptions=True)
         agent_opinions = []
         round1_tokens = 0
-        for op in opinions:
+        round1_step_keys = [
+            "round1_content_done",
+            "round1_visual_done",
+            "round1_growth_done",
+            "round1_user_done",
+        ]
+        round1_step_msgs = [
+            "内容分析师诊断完成",
+            "视觉诊断师诊断完成",
+            "增长策略师诊断完成",
+            "用户模拟器诊断完成",
+        ]
+
+        for idx, op in enumerate(opinions):
             if isinstance(op, Exception):
                 agent_opinions.append({
                     "agent_name": "Unknown", "dimension": "error", "score": 0,
@@ -184,16 +213,22 @@ class Orchestrator:
                     round1_tokens += meta.get("total_tokens", 0)
                     logger.info("  [%s] tokens=%d", op.get("agent_name", "?"), meta.get("total_tokens", 0))
                 agent_opinions.append(op)
+            if idx < len(round1_step_keys):
+                await _emit_progress(round1_step_keys[idx], round1_step_msgs[idx])
 
         logger.info("Round 1 诊断耗时 %.1fs，tokens=%d", time.time() - t1, round1_tokens)
+        await _emit_progress("round1_done", "专家诊断完成，进入辩论环节")
 
         # --- Step 4: Agent 辩论（Round 2）---
+        await _emit_progress("debate_start", "专家正在互相质疑与补充...")
         t2 = time.time()
         agents_list = [content_agent, visual_agent, growth_agent, user_sim_agent]
         debate_records, debate_tokens = await self._run_debate(agent_opinions, agents_list)
         logger.info("辩论耗时 %.1fs，tokens=%d", time.time() - t2, debate_tokens)
+        await _emit_progress("debate_done", "辩论完成，进入综合裁判")
 
         # --- Step 5: 综合裁判 ---
+        await _emit_progress("judge_start", "综合裁判正在汇总全部意见...")
         t3 = time.time()
         judge = JudgeAgent(model=MODEL_PRO)
         final_report = await judge.diagnose(
@@ -203,8 +238,10 @@ class Orchestrator:
         judge_meta = final_report.pop("_meta", None)
         judge_tokens = judge_meta.get("total_tokens", 0) if judge_meta else 0
         logger.info("裁判耗时 %.1fs，tokens=%d", time.time() - t3, judge_tokens)
+        await _emit_progress("judge_done", "裁判评定完成，正在整理报告")
 
         # --- Step 6: 组装响应 ---
+        await _emit_progress("finalizing", "正在生成最终诊断报告...")
         simulated_comments = []
         for op in agent_opinions:
             if "simulated_comments" in op:

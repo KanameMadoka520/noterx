@@ -1,15 +1,14 @@
-import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+﻿import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import {
   Box, Typography, TextField, Button, Stack, Chip,
-  CircularProgress, Alert, Paper, Stepper, Step, StepLabel, useTheme,
+  CircularProgress, Alert, Paper, useTheme,
   useMediaQuery,
 } from "@mui/material";
 import HistoryOutlined from "@mui/icons-material/HistoryOutlined";
 import CheckCircleIcon from "@mui/icons-material/CheckCircle";
 import WarningAmberIcon from "@mui/icons-material/WarningAmber";
-import ArrowBackOutlined from "@mui/icons-material/ArrowBackOutlined";
 import CategoryPicker from "../components/CategoryPicker";
 import UploadZone from "../components/UploadZone";
 import { quickRecognize } from "../utils/api";
@@ -20,18 +19,21 @@ function fkey(f: File) {
   return `${f.name}_${f.size}_${f.lastModified}`;
 }
 
-/** 中文垂类 → 英文 key 映射 */
+/** 中文垂类 -> 英文 key 映射 */
 const CAT_MAP: Record<string, string> = {
-  "美食": "food", "穿搭": "fashion", "科技": "tech", "数码": "tech",
-  "旅行": "travel", "旅游": "travel", "美妆": "beauty",
-  "健身": "fitness", "运动": "fitness",
+  "美食": "food",
+  "穿搭": "fashion",
+  "科技": "tech",
+  "数码": "tech",
+  "旅行": "travel",
+  "旅游": "travel",
+  "美妆": "beauty",
+  "健身": "fitness",
+  "运动": "fitness",
 };
 
-const WIZARD_LABELS = ["上传素材", "完善信息并开始"];
 
-/**
- * 首页：移动端为两步向导（上传后自动进入填写页，可返回）；桌面端为双栏卡片 + 固定视口，表单区内部滚动。
- */
+/** 首页：桌面端双栏布局，移动端单页布局 */
 export default function Home() {
   const navigate = useNavigate();
   const theme = useTheme();
@@ -44,16 +46,50 @@ export default function Home() {
 
   const [aiRecogs, setAiRecogs] = useState<Record<string, QuickRecognizeResult>>({});
   const [aiLoading, setAiLoading] = useState<Record<string, boolean>>({});
-  const [aiSuggestion, setAiSuggestion] = useState("");
+  const [uploadingPulse, setUploadingPulse] = useState(false);
+  const [analyzingPulse, setAnalyzingPulse] = useState(false);
 
   const [userEdited, setUserEdited] = useState({ title: false, content: false, category: false });
 
-  /** 移动端分步：`auto` 上传后自动进第 2 步；`hold` 用户点「返回」后暂停自动跳转 */
-  const [wizardStep, setWizardStep] = useState(0);
-  const [wizardHold, setWizardHold] = useState(false);
-  const autoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const uploadPulseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const analyzePulseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const recognizeInFlightRef = useRef<Set<string>>(new Set());
+  const prevPendingRecognitionRef = useRef(false);
 
   useEffect(() => { document.title = "薯医 NoteRx"; }, []);
+
+  useEffect(() => {
+    return () => {
+      if (uploadPulseTimerRef.current) clearTimeout(uploadPulseTimerRef.current);
+      if (analyzePulseTimerRef.current) clearTimeout(analyzePulseTimerRef.current);
+    };
+  }, []);
+
+  const triggerUploadPulse = useCallback(() => {
+    if (uploadPulseTimerRef.current) clearTimeout(uploadPulseTimerRef.current);
+    setUploadingPulse(true);
+    uploadPulseTimerRef.current = setTimeout(() => {
+      setUploadingPulse(false);
+      uploadPulseTimerRef.current = null;
+    }, 500);
+  }, []);
+
+  const handleFilesChange = useCallback(
+    (newFiles: File[]) => {
+      setFiles(newFiles.slice(0, 9));
+      if (newFiles.length > 0) triggerUploadPulse();
+    },
+    [triggerUploadPulse],
+  );
+
+  const appendFiles = useCallback(
+    (incoming: File[]) => {
+      if (incoming.length === 0) return;
+      setFiles((prev) => [...prev, ...incoming].slice(0, 9));
+      triggerUploadPulse();
+    },
+    [triggerUploadPulse],
+  );
 
   /** Ctrl+V paste images */
   useEffect(() => {
@@ -67,15 +103,22 @@ export default function Home() {
           if (file) pasted.push(file);
         }
       }
-      if (pasted.length > 0) setFiles((prev) => [...prev, ...pasted].slice(0, 9));
+      appendFiles(pasted);
     };
     window.addEventListener("paste", handlePaste);
     return () => window.removeEventListener("paste", handlePaste);
-  }, []);
+  }, [appendFiles]);
 
   const anyLoading = useMemo(() => Object.values(aiLoading).some(Boolean), [aiLoading]);
   const allResults = useMemo(() => Object.values(aiRecogs), [aiRecogs]);
-  const successResults = useMemo(() => allResults.filter((r) => r.success), [allResults]);
+  const successRecogEntries = useMemo(
+    () => Object.entries(aiRecogs).filter(([, r]) => r.success),
+    [aiRecogs],
+  );
+  const successResults = useMemo(
+    () => successRecogEntries.map(([, r]) => r),
+    [successRecogEntries],
+  );
 
   const aggregated = useMemo(() => {
     let bestTitle = "";
@@ -83,20 +126,30 @@ export default function Home() {
     let bestCategory = "";
     let bestSummary = "";
 
-    for (const r of successResults) {
-      if (!bestTitle && r.title?.trim()) bestTitle = r.title.trim();
-      if (!bestContent && r.content_text?.trim()) bestContent = r.content_text.trim();
+    for (const [, r] of successRecogEntries) {
+      if ((r.slot_type || "").toLowerCase() === "content") {
+        if (!bestTitle && r.title?.trim()) bestTitle = r.title.trim();
+        if (!bestContent && r.content_text?.trim()) bestContent = r.content_text.trim();
+      }
       if (!bestCategory && r.category?.trim()) bestCategory = r.category.trim();
       if (!bestSummary && r.summary?.trim()) bestSummary = r.summary.trim();
     }
 
     return { bestTitle, bestContent, bestCategory, bestSummary };
-  }, [successResults]);
+  }, [successRecogEntries]);
 
   const imageFileKeys = useMemo(
     () => new Set(files.filter((f) => f.type.startsWith("image/")).map(fkey)),
     [files],
   );
+
+  const pendingRecognition = useMemo(() => {
+    if (imageFileKeys.size === 0) return false;
+    for (const key of imageFileKeys) {
+      if (aiLoading[key] || !aiRecogs[key]) return true;
+    }
+    return false;
+  }, [imageFileKeys, aiLoading, aiRecogs]);
 
   const allRecognitionDone = useMemo(() => {
     if (imageFileKeys.size === 0) return false;
@@ -108,11 +161,10 @@ export default function Home() {
   }, [imageFileKeys, aiRecogs, aiLoading]);
 
   useEffect(() => {
-    const { bestTitle, bestContent, bestCategory, bestSummary } = aggregated;
+    const { bestTitle, bestContent, bestCategory } = aggregated;
 
-    if (!userEdited.title) {
-      const fillTitle = bestTitle || bestSummary;
-      if (fillTitle) setTitle(fillTitle.slice(0, 100));
+    if (!userEdited.title && bestTitle) {
+      setTitle(bestTitle.slice(0, 100));
     }
     if (!userEdited.content && bestContent) {
       setContent(bestContent);
@@ -145,80 +197,118 @@ export default function Home() {
     };
   }, [aggregated, userEdited]);
 
-  const runRecognition = useCallback(async (file: File) => {
+  const runRecognition = useCallback(async (file: File, slotHint?: "cover" | "content" | "profile" | "comments") => {
     const key = fkey(file);
+    if (recognizeInFlightRef.current.has(key)) return;
+    recognizeInFlightRef.current.add(key);
     setAiLoading((p) => {
       if (p[key]) return p;
       return { ...p, [key]: true };
     });
     try {
-      const res = await quickRecognize(file);
+      const res = await quickRecognize(file, slotHint);
       setAiRecogs((p) => ({ ...p, [key]: res }));
     } catch {
       setAiRecogs((p) => ({ ...p, [key]: { success: false, slot_type: "unknown", category: "", summary: "", error: "识别失败" } }));
     } finally {
+      recognizeInFlightRef.current.delete(key);
       setAiLoading((p) => ({ ...p, [key]: false }));
     }
   }, []);
 
   useEffect(() => {
-    const imgCount = files.filter((f) => f.type.startsWith("image/")).length;
-    const hasVideo = files.some((f) => f.type.startsWith("video/"));
-    if (files.length === 0) setAiSuggestion("");
-    else if (imgCount === 1 && !hasVideo) setAiSuggestion("建议再上传正文截图或评论区截图，让诊断更全面");
-    else if (imgCount === 2) setAiSuggestion("不错！可以继续补充主页截图和评论区截图");
-    else if (imgCount >= 3) setAiSuggestion("图片充足，可以直接开始诊断了");
-    else if (hasVideo && imgCount === 0) setAiSuggestion("建议再补一张封面截图，提升视觉维度分析效果");
-    else setAiSuggestion("");
+    const validKeys = new Set(files.map(fkey));
+    setAiRecogs((prev) => {
+      let changed = false;
+      const next: Record<string, QuickRecognizeResult> = {};
+      Object.entries(prev).forEach(([key, value]) => {
+        if (validKeys.has(key)) next[key] = value;
+        else changed = true;
+      });
+      return changed ? next : prev;
+    });
+    setAiLoading((prev) => {
+      let changed = false;
+      const next: Record<string, boolean> = {};
+      Object.entries(prev).forEach(([key, value]) => {
+        if (validKeys.has(key)) next[key] = value;
+        else changed = true;
+      });
+      return changed ? next : prev;
+    });
+    recognizeInFlightRef.current.forEach((key) => {
+      if (!validKeys.has(key)) recognizeInFlightRef.current.delete(key);
+    });
   }, [files]);
+
+  useEffect(() => {
+    files.forEach((file) => {
+      if (!file.type.startsWith("image/")) return;
+      const key = fkey(file);
+      if (!aiRecogs[key] && !aiLoading[key]) {
+        void runRecognition(file);
+      }
+    });
+  }, [files, aiRecogs, aiLoading, runRecognition]);
+
+  useEffect(() => {
+    if (!prevPendingRecognitionRef.current && pendingRecognition && analyzePulseTimerRef.current) {
+      clearTimeout(analyzePulseTimerRef.current);
+      analyzePulseTimerRef.current = null;
+      setAnalyzingPulse(false);
+    }
+    if (prevPendingRecognitionRef.current && !pendingRecognition && imageFileKeys.size > 0) {
+      if (analyzePulseTimerRef.current) clearTimeout(analyzePulseTimerRef.current);
+      setAnalyzingPulse(true);
+      analyzePulseTimerRef.current = setTimeout(() => {
+        setAnalyzingPulse(false);
+        analyzePulseTimerRef.current = null;
+      }, 700);
+    }
+    prevPendingRecognitionRef.current = pendingRecognition;
+  }, [pendingRecognition, imageFileKeys.size]);
 
   useEffect(() => {
     if (files.length === 0) {
       setAiRecogs({});
       setAiLoading({});
+      recognizeInFlightRef.current.clear();
       setUserEdited({ title: false, content: false, category: false });
       setTitle("");
       setContent("");
       setCategory("food");
-      setWizardStep(0);
-      setWizardHold(false);
+      setUploadingPulse(false);
+      setAnalyzingPulse(false);
+      if (uploadPulseTimerRef.current) {
+        clearTimeout(uploadPulseTimerRef.current);
+        uploadPulseTimerRef.current = null;
+      }
+      if (analyzePulseTimerRef.current) {
+        clearTimeout(analyzePulseTimerRef.current);
+        analyzePulseTimerRef.current = null;
+      }
     }
   }, [files.length]);
 
-  /** 移动端：有素材且未暂停时，延迟自动进入第二步 */
-  useEffect(() => {
-    if (isDesktop) return;
-    if (autoTimerRef.current) {
-      clearTimeout(autoTimerRef.current);
-      autoTimerRef.current = null;
+  const processingStatus = useMemo(() => {
+    if (files.length === 0) return null;
+    if (uploadingPulse) {
+      return { label: "上传中", tone: "info" as const, text: "素材已接收，正在准备识别..." };
     }
-    if (files.length === 0 || wizardHold || wizardStep !== 0) return;
-    autoTimerRef.current = setTimeout(() => {
-      setWizardStep(1);
-      autoTimerRef.current = null;
-    }, 480);
-    return () => {
-      if (autoTimerRef.current) {
-        clearTimeout(autoTimerRef.current);
-        autoTimerRef.current = null;
-      }
-    };
-  }, [files.length, wizardHold, wizardStep, isDesktop]);
+    if (pendingRecognition) {
+      return { label: "识别中", tone: "info" as const, text: "AI 正在自动识别封面/详情/主页/评论区..." };
+    }
+    if (analyzingPulse) {
+      return { label: "分析中", tone: "info" as const, text: "正在汇总识别结果并回填表单..." };
+    }
+    if (allRecognitionDone) {
+      return { label: "已就绪", tone: "success" as const, text: "识别完成，可以继续发起诊断。" };
+    }
+    return null;
+  }, [files.length, uploadingPulse, pendingRecognition, analyzingPulse, allRecognitionDone]);
 
-  const handleFilesChange = useCallback(
-    (newFiles: File[]) => {
-      setFiles(newFiles);
-      for (const f of newFiles) {
-        const key = fkey(f);
-        if (f.type.startsWith("image/") && !aiRecogs[key]) {
-          runRecognition(f);
-        }
-      }
-    },
-    [runRecognition, aiRecogs],
-  );
-
-  const canSubmit = files.length > 0 && title.trim().length > 0;
+  const lockInputs = !!processingStatus && processingStatus.label !== "已就绪";
+  const isFormBlocked = files.length > 0 && !allRecognitionDone;
 
   const handleSubmit = () => {
     if (!canSubmit) return;
@@ -232,73 +322,86 @@ export default function Home() {
     });
   };
 
-  const imageCount = files.filter((f) => f.type.startsWith("image/")).length;
-  const guideSteps = ["上传封面", "补充正文", "补充主页", "补充评论区"];
-  const currentGuideIndex = Math.min(imageCount, guideSteps.length - 1);
+  const recognizedSlots = useMemo(
+    () => new Set(
+      successRecogEntries
+        .map(([, r]) => (typeof r.slot_type === "string" ? r.slot_type.toLowerCase() : ""))
+        .filter(Boolean),
+    ),
+    [successRecogEntries],
+  );
+  const hasDetailScreenshot = recognizedSlots.has("content");
+  const canSubmit = files.length > 0 && title.trim().length > 0 && !lockInputs && !isFormBlocked && hasDetailScreenshot;
+  const aiSuggestion = useMemo(() => {
+    if (files.length === 0) return "";
+    if (!allRecognitionDone) return "";
+    const hasBody = Boolean(content.trim() || aggregated.bestContent);
+    const hasCover = recognizedSlots.has("cover");
+    const hasProfile = recognizedSlots.has("profile");
+    const hasComments = recognizedSlots.has("comments");
 
-  const handleWizardBack = () => {
-    setWizardStep(0);
-    setWizardHold(true);
-  };
-
-  const handleWizardContinue = () => {
-    setWizardHold(false);
-    setWizardStep(1);
+    if (!hasDetailScreenshot) return "未检测到笔记详情页截图，请上传包含标题+正文/标签的详情页，AI 才会提取笔记内容。";
+    if (!hasBody) return "已检测到详情页，但正文仍不清晰，建议补充一张更清晰的详情截图。";
+    if (!hasCover) return "可补充封面截图，提升视觉内容判断。";
+    if (!hasProfile) return "可补充主页截图，帮助判断账号定位。";
+    if (!hasComments) return "可补充评论区截图，分析互动质量。";
+    return "信息较完整，可以直接开始诊断。";
+  }, [files.length, allRecognitionDone, content, aggregated.bestContent, recognizedSlots, hasDetailScreenshot]);
+  const slotLabelMap: Record<string, string> = {
+    content: "详情",
+    cover: "封面",
+    profile: "主页",
+    comments: "评论区",
   };
 
   const guideCard = (
     <Box
       sx={{
-        p: { xs: 1.75, md: 1.35 },
+        p: { xs: 1.5, md: 1.2 },
         borderRadius: "14px",
         flexShrink: 0,
-        background: "linear-gradient(145deg, rgba(255, 245, 247, 0.95) 0%, rgba(255, 250, 251, 0.98) 100%)",
-        border: "1px solid rgba(255, 36, 66, 0.12)",
-        boxShadow: "inset 0 1px 0 rgba(255, 255, 255, 0.85)",
+        background: "linear-gradient(145deg, rgba(250, 251, 255, 0.95) 0%, rgba(255, 255, 255, 0.98) 100%)",
+        border: "1px solid rgba(0, 0, 0, 0.08)",
+        boxShadow: "inset 0 1px 0 rgba(255, 255, 255, 0.88)",
       }}
     >
-      <Typography
-        sx={{
-          fontSize: { xs: 12, md: 11 },
-          background: "linear-gradient(90deg, #ff2442, #ff6b81)",
-          backgroundClip: "text",
-          WebkitBackgroundClip: "text",
-          WebkitTextFillColor: "transparent",
-          fontWeight: 700,
-          letterSpacing: "0.02em",
-          mb: { xs: 1, md: 0.85 },
-        }}
-      >
-        引导 · 按截图类型补齐素材，识别更准确
+      <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 1, mb: 0.9 }}>
+        <Typography sx={{ fontSize: { xs: 12, md: 11 }, color: "#111827", fontWeight: 700 }}>
+          一次上传自动分拣
+        </Typography>
+        <Chip
+          size="small"
+          label={`${files.length}/9`}
+          sx={{
+            height: 24,
+            fontSize: { xs: 10, md: 10 },
+            fontWeight: 700,
+            bgcolor: "rgba(37, 99, 235, 0.1)",
+            color: "#1d4ed8",
+            border: "1px solid rgba(37, 99, 235, 0.2)",
+          }}
+        />
+      </Box>
+      <Typography sx={{ fontSize: { xs: 12, md: 11 }, color: "#4b5563", lineHeight: 1.6 }}>
+        把视频和图片一次性上传，AI 会自动识别并区分封面、笔记详情、主页和评论区。
       </Typography>
-      <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.75 }}>
-        {guideSteps.map((step, idx) => (
+      <Box sx={{ mt: 0.8, display: "flex", flexWrap: "wrap", gap: 0.7 }}>
+        {Object.entries(slotLabelMap).map(([slot, label]) => (
           <Chip
-            key={step}
+            key={slot}
             size="small"
-            label={step}
-            sx={{
-              background: idx <= currentGuideIndex ? "linear-gradient(135deg, #ff3d5c, #e61e3d)" : "rgba(255,255,255,0.92)",
-              color: idx <= currentGuideIndex ? "#fff" : "#6b6b6b",
-              border: idx <= currentGuideIndex ? "none" : "1px solid rgba(0,0,0,0.06)",
-              fontSize: { xs: 11, md: 10 },
-              height: { md: 24 },
-              fontWeight: idx === currentGuideIndex ? 700 : 500,
-              boxShadow: idx <= currentGuideIndex ? "0 2px 8px rgba(255, 36, 66, 0.25)" : "0 1px 2px rgba(0,0,0,0.04)",
-              transition: "all 0.2s ease",
-            }}
+            label={label}
+            color={recognizedSlots.has(slot) ? "success" : "default"}
+            variant={recognizedSlots.has(slot) ? "filled" : "outlined"}
+            sx={{ fontSize: 11, height: 24 }}
           />
         ))}
       </Box>
-      <Typography sx={{ mt: { xs: 1, md: 0.85 }, fontSize: { xs: 12, md: 11 }, color: "#5c5c5c", lineHeight: 1.55 }}>
-        <Box component="span" sx={{ color: "#ff2442", fontWeight: 600 }}>当前建议</Box>
-        ：{guideSteps[currentGuideIndex]}
-      </Typography>
     </Box>
   );
 
   const aiPanel = (
-    (anyLoading || successResults.length > 0 || allFailed || aiSuggestion) && (
+    (processingStatus || anyLoading || successResults.length > 0 || allFailed || aiSuggestion) && (
       <Box
         sx={{
           p: { xs: 2, md: 1.35 },
@@ -310,20 +413,30 @@ export default function Home() {
           backdropFilter: "blur(8px)",
         }}
       >
+        {processingStatus && (
+          <Alert
+            severity={processingStatus.tone}
+            sx={{ mb: anyLoading || successResults.length > 0 || allFailed || aiSuggestion ? 1 : 0, py: 0 }}
+          >
+            <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 1 }}>
+              <Typography sx={{ fontSize: { xs: 12, md: 11 }, fontWeight: 700 }}>{processingStatus.label}</Typography>
+              <Typography sx={{ fontSize: { xs: 12, md: 11 }, color: "text.secondary" }}>{processingStatus.text}</Typography>
+            </Box>
+          </Alert>
+        )}
         {anyLoading && (
           <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: successResults.length > 0 ? 1 : 0 }}>
             <CircularProgress size={14} thickness={5} sx={{ color: "#ff2442" }} />
-            <Typography sx={{ fontSize: { xs: 12, md: 11 }, color: "#999" }}>AI 正在识别标题、正文、垂类...</Typography>
+            <Typography sx={{ fontSize: { xs: 12, md: 11 }, color: "#999" }}>AI 正在识别标题、正文和内容类型...</Typography>
           </Box>
         )}
         {allFailed && (
           <Box>
             <Typography sx={{ fontSize: { xs: 12, md: 11 }, fontWeight: 600, color: "#92400e", mb: 0.5 }}>
-              当前素材的 AI 快识全部失败
+              当前素材的 AI 快速识别全部失败
             </Typography>
             <Typography sx={{ fontSize: { xs: 12, md: 11 }, color: "#a16207", lineHeight: 1.65 }}>
-              多数是「后端没开」或「Key 失效」：请先保证本机 <code style={{ fontSize: "0.9em" }}>uvicorn</code> 在 8000 端口运行（与前端 <code style={{ fontSize: "0.9em" }}>/api</code> 代理一致），再检查 <code style={{ fontSize: "0.9em" }}>backend/.env</code> 里的
-              OPENAI_API_KEY。也可在开发者工具 Network 中查看 quick-recognize 是否 502/401。若暂时无法识别，可手动填标题后继续诊断。
+              常见原因是后端未启动或 Key 无效。请确认本机 `uvicorn` 在 `8000` 端口运行，并检查 `backend/.env` 中的 `OPENAI_API_KEY`。若暂时无法识别，也可手动补充后继续诊断。
             </Typography>
           </Box>
         )}
@@ -333,7 +446,7 @@ export default function Home() {
               <Chip
                 key={i}
                 icon={<CheckCircleIcon sx={{ fontSize: 14 }} />}
-                label={r.category ? `${r.category}${r.summary ? ` · ${r.summary.slice(0, 20)}` : ""}` : r.summary?.slice(0, 30)}
+                label={r.category ? `${r.category}${r.summary ? ` 路 ${r.summary.slice(0, 20)}` : ""}` : r.summary?.slice(0, 30)}
                 size="small"
                 sx={{
                   bgcolor: "rgba(16, 185, 129, 0.1)",
@@ -347,9 +460,14 @@ export default function Home() {
             ))}
           </Box>
         )}
-        {aiSuggestion && !allFailed && (
+        {aiSuggestion && !allFailed && aiSuggestion.includes("未检测到笔记详情页截图") && (
+          <Alert severity="error" sx={{ mt: 0.5, fontWeight: 700, "& .MuiAlert-message": { fontSize: { xs: 13, md: 12 }, lineHeight: 1.6 } }}>
+            {aiSuggestion}
+          </Alert>
+        )}
+        {aiSuggestion && !allFailed && !aiSuggestion.includes("未检测到笔记详情页截图") && (
           <Typography sx={{ fontSize: { xs: 12, md: 11 }, color: "#4b5563", lineHeight: 1.55 }}>
-            <Box component="span" sx={{ mr: 0.5 }} aria-hidden>✨</Box>
+            <Box component="span" sx={{ mr: 0.5, color: "#059669" }} aria-hidden>✓</Box>
             {aiSuggestion}
           </Typography>
         )}
@@ -365,15 +483,16 @@ export default function Home() {
           required
           fullWidth
           size={isDesktop ? "small" : "medium"}
+          disabled={lockInputs}
           value={title}
           onChange={(e) => { setTitle(e.target.value); setUserEdited((p) => ({ ...p, title: true })); }}
-          placeholder="上传图片后 AI 自动识别，也可手动输入"
+          placeholder="上传后 AI 会自动识别，也可手动输入"
           slotProps={{ htmlInput: { maxLength: 100 } }}
-          helperText={autoFilled.title ? "✅ AI 已自动识别填充，可自行修改" : `${title.length}/100`}
+          helperText={lockInputs ? "AI 处理中，识别完成后会自动回填标题" : autoFilled.title ? "✓ AI 已自动回填，可自行修改" : `${title.length}/100`}
         />
         {showWarnings && warnings.title && !title.trim() && !userEdited.title && (
           <Alert severity="warning" icon={<WarningAmberIcon fontSize="small" />} sx={{ mt: 0.5, py: 0, fontSize: 11 }}>
-            AI 未从图片中识别到笔记标题，请手动输入
+            AI 未从图片中识别到标题，请手动输入
           </Alert>
         )}
       </Box>
@@ -384,14 +503,15 @@ export default function Home() {
           multiline
           rows={isDesktop ? 3 : 4}
           size={isDesktop ? "small" : "medium"}
+          disabled={lockInputs}
           value={content}
           onChange={(e) => { setContent(e.target.value); setUserEdited((p) => ({ ...p, content: true })); }}
-          placeholder="上传图片后 AI 自动提取正文，也可手动输入"
-          helperText={autoFilled.content ? "✅ AI 已自动提取正文，可自行修改" : undefined}
+          placeholder="上传后 AI 会自动提取正文（包含标签）"
+          helperText={lockInputs ? "AI 处理中，识别完成后会自动回填正文" : autoFilled.content ? "✓ AI 已自动提取正文，可自行修改" : undefined}
         />
         {showWarnings && warnings.content && !content.trim() && !userEdited.content && (
           <Alert severity="warning" icon={<WarningAmberIcon fontSize="small" />} sx={{ mt: 0.5, py: 0, fontSize: 11 }}>
-            AI 未提取到正文，可上传正文截图或手动输入
+            AI 未提取到正文，可补充详情截图或手动输入
           </Alert>
         )}
       </Box>
@@ -442,31 +562,8 @@ export default function Home() {
     </Button>
   );
 
-  const stepHeader = (
-    <Stepper
-      activeStep={isDesktop ? 1 : wizardStep}
-      alternativeLabel
-      sx={{
-        mb: { xs: 2, md: 1.5 },
-        px: { xs: 0, md: 0.5 },
-        "& .MuiStepLabel-label": {
-          fontSize: { xs: 12, md: 12 },
-          fontWeight: 500,
-          color: "text.secondary",
-          "&.Mui-active": { color: "primary.main", fontWeight: 700 },
-          "&.Mui-completed": { color: "success.main", fontWeight: 600 },
-        },
-      }}
-    >
-      {WIZARD_LABELS.map((label) => (
-        <Step key={label}>
-          <StepLabel>{label}</StepLabel>
-        </Step>
-      ))}
-    </Stepper>
-  );
 
-  /** 桌面：双栏卡片，视口内展示，右侧表单区可滚动 */
+  /** 桌面布局 */
   const desktopLayout = (
     <Box
       sx={{
@@ -520,7 +617,7 @@ export default function Home() {
               薯医 NoteRx
             </Typography>
             <Typography sx={{ fontSize: "0.72rem", color: "text.secondary", lineHeight: 1.35, opacity: 0.92 }}>
-              上传素材 → AI 预填 → 一键诊断
+              一次上传素材 → AI 自动识别 → 一键诊断
             </Typography>
           </Box>
         </Box>
@@ -578,7 +675,6 @@ export default function Home() {
               boxShadow: "0 10px 40px rgba(25, 20, 35, 0.07), 0 1px 0 rgba(255,255,255,0.95) inset",
             }}
           >
-            {stepHeader}
             {guideCard}
             <Box sx={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
               <UploadZone files={files} onFilesChange={handleFilesChange} maxFiles={9} compact />
@@ -617,9 +713,25 @@ export default function Home() {
             </Typography>
             <Box sx={{ flex: 1, minHeight: 0, overflowY: "auto", pr: 0.5, display: "flex", flexDirection: "column", gap: 1.5 }}>
               {aiPanel}
-              {formFields}
+              <Box sx={{ position: "relative" }}>
+                {isFormBlocked && (
+                  <Alert severity="info" sx={{ mb: 1 }}>
+                    AI 正在识别图片内容，识别完成后可编辑“笔记信息”。
+                  </Alert>
+                )}
+                <Box sx={{ opacity: isFormBlocked ? 0.5 : 1, pointerEvents: isFormBlocked ? "none" : "auto", transition: "opacity 0.2s ease" }}>
+                  {formFields}
+                </Box>
+              </Box>
             </Box>
-            <Box sx={{ pt: 1.5, flexShrink: 0 }}>{submitBtn}</Box>
+            <Box sx={{ pt: 1.5, flexShrink: 0 }}>
+              {submitBtn}
+              {files.length > 0 && allRecognitionDone && !hasDetailScreenshot && (
+                <Alert severity="warning" sx={{ mt: 1 }}>
+                  未检测到“笔记详情页”截图，暂不支持提交。请补充上传后再继续。
+                </Alert>
+              )}
+            </Box>
           </Paper>
         </Box>
       </Box>
@@ -630,7 +742,6 @@ export default function Home() {
     </Box>
   );
 
-  /** 移动端：分步 + 自动进入第二步，可返回 */
   const mobileLayout = (
     <Box
       component={motion.div}
@@ -663,36 +774,6 @@ export default function Home() {
           历史记录
         </Button>
       </Box>
-
-      <Box sx={{ textAlign: "center", mb: 2 }}>
-        <Box sx={{ display: "inline-flex", alignItems: "center", gap: 1, mb: 0.5 }}>
-          <svg width="28" height="28" viewBox="0 0 28 28" fill="none" aria-hidden>
-            <defs>
-              <linearGradient id="homeLogoMob" x1="4" y1="4" x2="26" y2="24" gradientUnits="userSpaceOnUse">
-                <stop stopColor="#ff5c6f" />
-                <stop offset="1" stopColor="#e61e3d" />
-              </linearGradient>
-            </defs>
-            <rect width="28" height="28" rx="7" fill="url(#homeLogoMob)" />
-            <text x="14" y="19" textAnchor="middle" fill="#fff" fontSize="13" fontWeight="700" fontFamily="Inter, system-ui, sans-serif">Rx</text>
-          </svg>
-          <Typography
-            sx={{
-              fontSize: "1.35rem",
-              fontWeight: 800,
-              letterSpacing: "-0.02em",
-              background: "linear-gradient(90deg, #1a1a1a, #3d3d3d)",
-              backgroundClip: "text",
-              WebkitBackgroundClip: "text",
-              WebkitTextFillColor: "transparent",
-            }}
-          >
-            薯医 NoteRx
-          </Typography>
-        </Box>
-        <Typography sx={{ fontSize: "0.82rem", color: "text.secondary", lineHeight: 1.5 }}>分步完成，上传后会自动进入下一步</Typography>
-      </Box>
-
       <Paper
         elevation={0}
         sx={{
@@ -706,65 +787,28 @@ export default function Home() {
           boxShadow: "0 12px 48px rgba(25, 20, 35, 0.08), 0 1px 0 rgba(255,255,255,0.95) inset",
         }}
       >
-        {stepHeader}
-
-        <AnimatePresence mode="wait">
-          {wizardStep === 0 && (
-            <motion.div
-              key="step0"
-              initial={{ opacity: 0, x: -12 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: 12 }}
-              transition={{ duration: 0.22 }}
-            >
-              <Stack spacing={2}>
-                {guideCard}
-                <UploadZone files={files} onFilesChange={handleFilesChange} maxFiles={9} />
-                <Typography sx={{ fontSize: 11, color: "#999", textAlign: "center" }}>
-                  {files.length === 0 ? "请先上传至少一张图或一个视频" : wizardHold ? "可点下方按钮进入填写信息" : "即将自动进入「完善信息」…"}
-                </Typography>
-                {wizardHold && files.length > 0 && (
-                  <Button variant="outlined" fullWidth onClick={handleWizardContinue} sx={{ borderRadius: "14px", py: 1.1, fontWeight: 600 }}>
-                    前往完善信息
-                  </Button>
-                )}
-              </Stack>
-            </motion.div>
+        <Stack spacing={2}>
+          {guideCard}
+          <UploadZone files={files} onFilesChange={handleFilesChange} maxFiles={9} />
+          {aiPanel}
+          <Box sx={{ position: "relative" }}>
+            {isFormBlocked && (
+              <Alert severity="info">
+                AI 正在识别图片内容，识别完成后可编辑“笔记信息”。
+              </Alert>
+            )}
+            <Box sx={{ opacity: isFormBlocked ? 0.5 : 1, pointerEvents: isFormBlocked ? "none" : "auto", transition: "opacity 0.2s ease", mt: isFormBlocked ? 1 : 0 }}>
+              {formFields}
+            </Box>
+          </Box>
+          {submitBtn}
+          {files.length > 0 && allRecognitionDone && !hasDetailScreenshot && (
+            <Alert severity="warning">
+              未检测到“笔记详情页”截图，暂不支持提交。请补充上传后再继续。
+            </Alert>
           )}
-
-          {wizardStep === 1 && (
-            <motion.div
-              key="step1"
-              initial={{ opacity: 0, x: 12 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: -12 }}
-              transition={{ duration: 0.22 }}
-            >
-              <Stack spacing={2}>
-                <Button
-                  startIcon={<ArrowBackOutlined sx={{ fontSize: 18 }} />}
-                  onClick={handleWizardBack}
-                  sx={{
-                    alignSelf: "flex-start",
-                    color: "text.secondary",
-                    fontSize: 13,
-                    fontWeight: 600,
-                    mb: -0.5,
-                    borderRadius: "10px",
-                    "&:hover": { bgcolor: "rgba(255,36,66,0.06)" },
-                  }}
-                >
-                  返回上传
-                </Button>
-                {aiPanel}
-                {formFields}
-                {submitBtn}
-              </Stack>
-            </motion.div>
-          )}
-        </AnimatePresence>
+        </Stack>
       </Paper>
-
       <Typography sx={{ mt: 3, fontSize: "0.72rem", color: "text.disabled", letterSpacing: "0.03em" }}>
         薯医 NoteRx · AI 诊断仅供参考
       </Typography>
