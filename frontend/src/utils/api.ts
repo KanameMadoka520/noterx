@@ -113,4 +113,24 @@ export async function getBaseline(category: string) {
   return data;
 }
 
+/**
+ * 生成更多模拟评论
+ */
+export interface CommentWithReplies extends SimulatedComment {
+  replies?: SimulatedComment[];
+}
+
+export async function generateComments(params: {
+  title: string;
+  content: string;
+  category: string;
+  existing_count: number;
+}): Promise<CommentWithReplies[]> {
+  const { data } = await api.post<{ comments: CommentWithReplies[] }>(
+    "/generate-comments",
+    params
+  );
+  return data.comments;
+}
+
 export default api;

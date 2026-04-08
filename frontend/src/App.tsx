@@ -1,6 +1,8 @@
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, useLocation } from "react-router-dom";
 import { ThemeProvider, CssBaseline } from "@mui/material";
+import { AnimatePresence, motion } from "framer-motion";
 import theme from "./theme";
+import { pageTransition } from "./utils/motion";
 import Home from "./pages/Home";
 import Diagnosing from "./pages/Diagnosing";
 import Report from "./pages/Report";
@@ -9,7 +11,64 @@ import ErrorBoundary from "./components/ErrorBoundary";
 import "./index.css";
 
 /**
- * NoteRx 根组件
+ * Animated route wrapper — gives every page enter/exit transitions
+ * powered by Framer Motion's AnimatePresence.
+ */
+function AnimatedRoutes() {
+  const location = useLocation();
+
+  return (
+    <AnimatePresence mode="wait">
+      <Routes location={location} key={location.pathname}>
+        <Route
+          path="/"
+          element={
+            <motion.div
+              variants={pageTransition}
+              initial="initial"
+              animate="animate"
+              exit="exit"
+              style={{ minHeight: "100vh" }}
+            >
+              <Home />
+            </motion.div>
+          }
+        />
+        <Route
+          path="/diagnosing"
+          element={
+            <motion.div
+              variants={pageTransition}
+              initial="initial"
+              animate="animate"
+              exit="exit"
+              style={{ minHeight: "100vh" }}
+            >
+              <Diagnosing />
+            </motion.div>
+          }
+        />
+        <Route
+          path="/report"
+          element={
+            <motion.div
+              variants={pageTransition}
+              initial="initial"
+              animate="animate"
+              exit="exit"
+              style={{ minHeight: "100vh" }}
+            >
+              <Report />
+            </motion.div>
+          }
+        />
+      </Routes>
+    </AnimatePresence>
+  );
+}
+
+/**
+ * NoteRx Root Component
  */
 function App() {
   return (
@@ -17,11 +76,7 @@ function App() {
       <CssBaseline />
       <ErrorBoundary>
         <BrowserRouter>
-          <Routes>
-            <Route path="/" element={<Home />} />
-            <Route path="/diagnosing" element={<Diagnosing />} />
-            <Route path="/report" element={<Report />} />
-          </Routes>
+          <AnimatedRoutes />
           <ToastContainer />
         </BrowserRouter>
       </ErrorBoundary>

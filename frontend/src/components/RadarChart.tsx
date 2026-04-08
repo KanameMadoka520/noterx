@@ -12,28 +12,25 @@ const DIMENSION_LABELS: Record<string, string> = {
   overall: "综合评分",
 };
 
-/**
- * ECharts 五维诊断雷达图
- */
 export default function RadarChart({ data }: Props) {
-  const indicators = Object.keys(DIMENSION_LABELS).map((key) => ({
+  const keys = Object.keys(DIMENSION_LABELS);
+  const indicators = keys.map((key) => ({
     name: DIMENSION_LABELS[key],
     max: 100,
   }));
-
-  const values = Object.keys(DIMENSION_LABELS).map((key) => data[key] ?? 50);
+  const values = keys.map((key) => data[key] ?? 50);
 
   const option = {
+    animationDuration: 1200,
     radar: {
       indicator: indicators,
       shape: "polygon" as const,
       splitNumber: 4,
-      axisName: { color: "#6b7280", fontSize: 12 },
-      splitLine: { lineStyle: { color: "#e5e7eb" } },
-      splitArea: {
-        areaStyle: { color: ["#f0fdf4", "#ecfdf5", "#d1fae5", "#a7f3d0"] },
-      },
-      axisLine: { lineStyle: { color: "#d1d5db" } },
+      radius: "65%",
+      axisName: { color: "#262626", fontSize: 12, fontWeight: 600 },
+      splitLine: { lineStyle: { color: "#f0f0f0" } },
+      splitArea: { show: false },
+      axisLine: { lineStyle: { color: "#e8e8e8" } },
     },
     series: [
       {
@@ -41,16 +38,22 @@ export default function RadarChart({ data }: Props) {
         data: [
           {
             value: values,
-            name: "诊断评分",
-            areaStyle: { color: "rgba(16, 185, 129, 0.2)" },
-            lineStyle: { color: "#10b981", width: 2 },
-            itemStyle: { color: "#10b981" },
+            areaStyle: { color: "rgba(255,36,66,0.15)" },
+            lineStyle: { color: "#ff2442", width: 2 },
+            itemStyle: { color: "#ff2442", borderColor: "#fff", borderWidth: 2 },
+            symbol: "circle",
+            symbolSize: 6,
           },
         ],
       },
     ],
-    tooltip: {},
+    tooltip: {
+      trigger: "item",
+      backgroundColor: "#fff",
+      borderColor: "#f0f0f0",
+      textStyle: { color: "#262626", fontSize: 13 },
+    },
   };
 
-  return <ReactECharts option={option} style={{ height: 320 }} />;
+  return <ReactECharts option={option} style={{ height: 280 }} />;
 }

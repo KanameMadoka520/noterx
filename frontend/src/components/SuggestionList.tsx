@@ -1,5 +1,4 @@
-import { Box, Typography, Chip, Stack } from "@mui/material";
-import TrendingUpIcon from "@mui/icons-material/TrendingUp";
+import { Box, Typography, Stack } from "@mui/material";
 
 interface Suggestion {
   priority: number;
@@ -11,45 +10,39 @@ interface Props {
   suggestions: Suggestion[];
 }
 
-const PRIORITY_LABELS: { label: string; color: "error" | "warning" | "info" }[] = [
-  { label: "最优先", color: "error" },
-  { label: "重要", color: "warning" },
-  { label: "建议", color: "info" },
-];
+const PRIORITY_COLOR: Record<number, string> = {
+  1: "#dc2626",
+  2: "#d97706",
+  3: "#2563eb",
+};
 
-/**
- * 优化建议列表
- */
 export default function SuggestionList({ suggestions }: Props) {
   if (!suggestions.length) {
-    return (
-      <Typography variant="body2" color="text.secondary">
-        暂无优化建议
-      </Typography>
-    );
+    return <Typography sx={{ fontSize: 14, color: "#8e8e8e" }}>暂无优化建议</Typography>;
   }
 
   const sorted = [...suggestions].sort((a, b) => a.priority - b.priority);
 
   return (
-    <Stack spacing={2}>
+    <Stack spacing={1.5}>
       {sorted.map((s, i) => {
-        const badge = PRIORITY_LABELS[Math.min(i, PRIORITY_LABELS.length - 1)];
+        const color = PRIORITY_COLOR[s.priority] || PRIORITY_COLOR[3];
         return (
           <Box
             key={i}
-            sx={{ display: "flex", alignItems: "flex-start", gap: 1.5, p: 2, bgcolor: "grey.50", borderRadius: 2 }}
+            sx={{
+              borderLeft: `3px solid ${color}`,
+              pl: 2,
+            }}
           >
-            <Chip label={badge.label} color={badge.color} size="small" sx={{ fontWeight: 600 }} />
-            <Box sx={{ minWidth: 0 }}>
-              <Typography variant="body2">{s.description}</Typography>
-              {s.expected_impact && (
-                <Typography variant="caption" color="primary" sx={{ display: "flex", alignItems: "center", gap: 0.5, mt: 0.5 }}>
-                  <TrendingUpIcon sx={{ fontSize: 14 }} />
-                  {s.expected_impact}
-                </Typography>
-              )}
-            </Box>
+            <Typography sx={{ fontSize: 14, color: "#505050", lineHeight: 1.6 }}>
+              {s.description}
+            </Typography>
+            {s.expected_impact && (
+              <Typography sx={{ fontSize: 13, color: "#8e8e8e", mt: 0.25 }}>
+                {s.expected_impact}
+              </Typography>
+            )}
           </Box>
         );
       })}

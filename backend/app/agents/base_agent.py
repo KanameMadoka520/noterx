@@ -1,7 +1,7 @@
 """
 Agent 基类
 封装 LLM 调用、prompt 模板、结构化输出解析。
-支持 OpenAI / Anthropic 切换。
+支持多模型：flash(快速) / pro(专业) / omni(多模态)。
 """
 import json
 import os
@@ -18,18 +18,24 @@ for p in [Path(__file__).resolve().parents[2] / ".env", Path.cwd() / ".env", Pat
 
 logger = logging.getLogger("noterx.agent")
 
-LLM_PROVIDER = os.getenv("LLM_PROVIDER", "openai").lower()
+MODEL_FAST = os.getenv("LLM_MODEL_FAST", "mimo-v2-flash")
+MODEL_PRO = os.getenv("LLM_MODEL_PRO", "mimo-v2-pro")
+MODEL_OMNI = os.getenv("LLM_MODEL_OMNI", "mimo-v2-omni")
 
 
 def _get_client():
-    """根据 LLM_PROVIDER 环境变量获取对应 API 客户端"""
-    if LLM_PROVIDER == "anthropic":
-        from anthropic import AsyncAnthropic
-        return AsyncAnthropic(api_key=os.getenv("ANTHROPIC_API_KEY", ""))
+    """获取 OpenAI 兼容 API 客户端（绕过本地代理）"""
+    import httpx
     from openai import AsyncOpenAI
+    http_client = httpx.AsyncClient(
+        proxy=None,
+        trust_env=False,
+        timeout=httpx.Timeout(120.0, connect=30.0),
+    )
     return AsyncOpenAI(
         api_key=os.getenv("OPENAI_API_KEY", ""),
         base_url=os.getenv("OPENAI_BASE_URL", None),
+        http_client=http_client,
     )
 
 
@@ -39,39 +45,29 @@ class BaseAgent:
     agent_name: str = "BaseAgent"
     system_prompt: str = ""
 
-    def __init__(self, model: str = "gpt-4o"):
-        self.model = model
+    def __init__(self, model: Optional[str] = None):
+        self.model = model or MODEL_PRO
         self.client = _get_client()
 
     async def call_llm(
         self,
         user_message: str,
         system_override: Optional[str] = None,
+        model_override: Optional[str] = None,
+        max_tokens: int = 4000,
     ) -> dict:
-        """
-        调用 LLM 并解析 JSON 响应。
-
-        @param user_message - 用户消息
-        @param system_override - 可选的 system prompt 覆盖
-        @returns dict - 解析后的 JSON 响应
-        """
         sys_prompt = system_override or self.system_prompt
+        model = model_override or self.model
 
-        if LLM_PROVIDER == "anthropic":
-            return await self._call_anthropic(sys_prompt, user_message)
-        return await self._call_openai(sys_prompt, user_message)
-
-    async def _call_openai(self, sys_prompt: str, user_message: str) -> dict:
-        """OpenAI 兼容调用"""
         try:
             response = await self.client.chat.completions.create(
-                model=self.model,
+                model=model,
                 messages=[
                     {"role": "system", "content": sys_prompt},
                     {"role": "user", "content": user_message},
                 ],
                 temperature=0.7,
-                max_tokens=2000,
+                max_tokens=max_tokens,
                 response_format={"type": "json_object"},
             )
             raw = response.choices[0].message.content
@@ -88,19 +84,34 @@ class BaseAgent:
         except json.JSONDecodeError:
             return self._error_response("LLM 返回了非 JSON 格式的内容")
         except Exception as e:
-            logger.warning("OpenAI 调用失败: %s", e)
+            logger.warning("LLM 调用失败 [%s]: %s", model, e)
             return self._error_response(str(e))
 
-    async def _call_anthropic(self, sys_prompt: str, user_message: str) -> dict:
-        """Anthropic Claude 调用"""
+    async def call_llm_vision(
+        self,
+        text_message: str,
+        image_b64: str,
+        system_prompt: Optional[str] = None,
+        max_tokens: int = 2000,
+    ) -> dict:
+        """调用多模态模型分析图像"""
+        sys_prompt = system_prompt or self.system_prompt
         try:
-            response = await self.client.messages.create(
-                model=self.model if "claude" in self.model else "claude-sonnet-4-20250514",
-                max_tokens=2000,
-                system=sys_prompt,
-                messages=[{"role": "user", "content": user_message + "\n\n请以 JSON 格式输出。"}],
+            response = await self.client.chat.completions.create(
+                model=MODEL_OMNI,
+                messages=[
+                    {"role": "system", "content": sys_prompt},
+                    {
+                        "role": "user",
+                        "content": [
+                            {"type": "text", "text": text_message},
+                            {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{image_b64}"}},
+                        ],
+                    },
+                ],
+                max_tokens=max_tokens,
             )
-            raw = response.content[0].text
+            raw = response.choices[0].message.content
             clean = raw.strip()
             if clean.startswith("```"):
                 clean = clean.split("\n", 1)[1].rsplit("```", 1)[0]
@@ -108,20 +119,19 @@ class BaseAgent:
             usage = response.usage
             if usage:
                 result["_meta"] = {
-                    "prompt_tokens": usage.input_tokens,
-                    "completion_tokens": usage.output_tokens,
-                    "total_tokens": usage.input_tokens + usage.output_tokens,
+                    "prompt_tokens": usage.prompt_tokens,
+                    "completion_tokens": usage.completion_tokens,
+                    "total_tokens": usage.total_tokens,
                     "model": response.model,
                 }
             return result
         except json.JSONDecodeError:
-            return self._error_response("Claude 返回了非 JSON 格式的内容")
+            return self._error_response("多模态模型返回了非 JSON 格式的内容")
         except Exception as e:
-            logger.warning("Anthropic 调用失败: %s", e)
+            logger.warning("多模态调用失败: %s", e)
             return self._error_response(str(e))
 
     def _error_response(self, error_msg: str) -> dict:
-        """生成错误响应"""
         return {
             "agent_name": self.agent_name,
             "dimension": "error",
@@ -132,5 +142,4 @@ class BaseAgent:
         }
 
     def build_user_message(self, **kwargs) -> str:
-        """子类实现：构建发送给 LLM 的用户消息"""
         raise NotImplementedError
