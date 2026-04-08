@@ -130,6 +130,7 @@ export default function Home() {
     let bestCategory = "";
     let bestSummary = "";
 
+    // 优先从 content 类型提取，但如果没有 content 类型，也从其他类型提取
     for (const [, r] of successRecogEntries) {
       if ((r.slot_type || "").toLowerCase() === "content") {
         if (!bestTitle && r.title?.trim()) bestTitle = r.title.trim();
@@ -137,6 +138,13 @@ export default function Home() {
       }
       if (!bestCategory && r.category?.trim()) bestCategory = r.category.trim();
       if (!bestSummary && r.summary?.trim()) bestSummary = r.summary.trim();
+    }
+    // Fallback: 如果 content 类型没提取到，从任意类型取
+    if (!bestTitle || !bestContent) {
+      for (const [, r] of successRecogEntries) {
+        if (!bestTitle && r.title?.trim()) bestTitle = r.title.trim();
+        if (!bestContent && r.content_text?.trim()) bestContent = r.content_text.trim();
+      }
     }
 
     return { bestTitle, bestContent, bestCategory, bestSummary };
