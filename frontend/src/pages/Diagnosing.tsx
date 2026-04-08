@@ -1,11 +1,9 @@
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { motion, AnimatePresence } from "framer-motion";
+import { AnimatePresence, motion } from "framer-motion";
 import { Box, Typography } from "@mui/material";
 import CheckCircleOutlinedIcon from "@mui/icons-material/CheckCircleOutlined";
-import { diagnoseNote } from "../utils/api";
-import type { DiagnoseResult } from "../utils/api";
-import { saveHistory } from "../utils/api";
+import { diagnoseNote, saveHistory, type DiagnoseResult } from "../utils/api";
 import { FALLBACK_REPORT } from "../utils/fallback";
 
 /* ── Steps ── */
@@ -63,7 +61,13 @@ export default function Diagnosing() {
   const location = useLocation();
   const navigate = useNavigate();
   const params = location.state as {
-    title: string; content: string; tags: string; category: string; coverFile: File | null;
+    title: string;
+    content: string;
+    tags: string;
+    category: string;
+    coverFile: File | null;
+    coverImages?: File[];
+    videoFile?: File | null;
   } | null;
 
   const [step, setStep] = useState(0);
@@ -82,10 +86,15 @@ export default function Diagnosing() {
     (async () => {
       try {
         const result = await diagnoseNote({
-          title: params.title, content: params.content,
-          category: params.category, tags: params.tags,
+          title: params.title,
+          content: params.content,
+          category: params.category,
+          tags: params.tags,
           coverImage: params.coverFile ?? undefined,
+          coverImages: params.coverImages ?? [],
+          videoFile: params.videoFile ?? undefined,
         });
+
         resultRef.current = { report: result, isFallback: false };
         saveHistory({ title: params.title, category: params.category, report: result as DiagnoseResult })
           .catch(() => {});
@@ -101,16 +110,24 @@ export default function Diagnosing() {
         if (apiDone.current && prev >= STEPS.length - 2) {
           clearInterval(stepTimer);
           setTimeout(() => {
-            if (!cancelled && resultRef.current)
-              navigate("/report", { state: { report: resultRef.current.report, params, isFallback: resultRef.current.isFallback } });
-          }, 600);
+            if (!cancelled && resultRef.current) {
+              navigate("/report", {
+                state: {
+                  report: resultRef.current.report,
+                  params,
+                  isFallback: resultRef.current.isFallback,
+                },
+              });
+            }
+          }, 520);
           return STEPS.length - 1;
         }
+
         if (prev >= STEPS.length - 1) return prev;
         if (!apiDone.current && prev >= STEPS.length - 2) return prev;
         return prev + 1;
       });
-    }, 2800);
+    }, 2400);
 
     const tipTimer = setInterval(() => setTipIdx((p) => (p + 1) % tips.length), 5000);
     const clockTimer = setInterval(() => setElapsed((p) => p + 1), 1000);

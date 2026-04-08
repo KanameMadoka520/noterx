@@ -26,7 +26,7 @@ import type { HistoryListItem } from "../utils/api";
 
 const CATEGORY_LABEL: Record<string, string> = {
   food: "美食",
-  fashion: "时尚",
+  fashion: "穿搭",
   tech: "科技",
   travel: "旅行",
   beauty: "美妆",
@@ -57,8 +57,8 @@ export default function History() {
     try {
       const list = await getHistoryList(50);
       setItems(list);
-    } catch (e) {
-      console.error("获取历史记录失败", e);
+    } catch {
+      setItems([]);
     } finally {
       setLoading(false);
     }
@@ -68,7 +68,6 @@ export default function History() {
     fetchList();
   }, []);
 
-  /** 点击卡片：加载完整报告后跳转 Report 页 */
   const handleOpen = async (item: HistoryListItem) => {
     setNavigating(item.id);
     try {
@@ -80,22 +79,19 @@ export default function History() {
           isFallback: false,
         },
       });
-    } catch (e) {
-      console.error("获取报告详情失败", e);
+    } finally {
       setNavigating(null);
     }
   };
 
-  /** 确认删除 */
   const handleDelete = async () => {
     if (!deleteTarget) return;
     try {
       await deleteHistory(deleteTarget.id);
-      setItems((prev) => prev.filter((i) => i.id !== deleteTarget.id));
-    } catch (e) {
-      console.error("删除失败", e);
+      setItems((prev) => prev.filter((item) => item.id !== deleteTarget.id));
+    } finally {
+      setDeleteTarget(null);
     }
-    setDeleteTarget(null);
   };
 
   const formatTime = (ts: string) => {
@@ -133,12 +129,12 @@ export default function History() {
           }}
         >
           <Button
-            startIcon={<ArrowBackIcon />}
+            startIcon={<ArrowBackIcon sx={{ fontSize: 16 }} />}
             onClick={() => navigate("/")}
             size="small"
             sx={{ color: "#262626" }}
           >
-            首页
+            返回
           </Button>
           <Typography sx={{ fontWeight: 700, color: "#262626", fontSize: 16 }}>
             诊断历史
@@ -315,7 +311,6 @@ export default function History() {
         )}
       </Box>
 
-      {/* 删除确认对话框 */}
       <Dialog
         open={!!deleteTarget}
         onClose={() => setDeleteTarget(null)}
