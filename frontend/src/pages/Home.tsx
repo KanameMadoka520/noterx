@@ -190,7 +190,7 @@ export default function Home() {
             {mode === "screenshot" && (
               <motion.div key="screenshot" {...tabContent}>
                 <Stack spacing={2}>
-                  <UploadZone onFileSelect={setCoverFile} />
+                  <UploadZone file={coverFile} onFileSelect={setCoverFile} />
                   <TextField label="笔记标题（可选，留空由 AI 识别）" fullWidth value={title} onChange={(e) => setTitle(e.target.value)} />
                 </Stack>
               </motion.div>
