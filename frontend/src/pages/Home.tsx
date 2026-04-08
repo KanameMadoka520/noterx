@@ -354,19 +354,6 @@ export default function Home() {
     comments: "评论区",
   };
 
-
-  const isReady = files.length > 0 && allRecognitionDone;
-  const [leaving, setLeaving] = useState(false);
-
-  return (
-    <Box sx={{
-      minHeight: "100dvh",
-      display: "flex",
-      flexDirection: "column",
-      bgcolor: "#fafafa",
-      fontFamily: "Inter, 'Noto Sans SC', sans-serif",
-    }}>
-
   const isReady = files.length > 0 && allRecognitionDone;
   const [leaving, setLeaving] = useState(false);
 
