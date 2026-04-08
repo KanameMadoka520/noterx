@@ -108,12 +108,11 @@ footer .motto{color:rgba(255,255,255,0.6);font-size:0.9rem;margin:0.8rem 0}
 .sticky-cta.show{transform:translateY(0) scale(1);opacity:1;pointer-events:all}
 .sticky-cta .btn-red{box-shadow:0 6px 28px rgba(255,36,66,0.45);padding:0.7rem 1.8rem;font-size:0.9rem;border-radius:50px}
 
-/* ━━ Launch overlay (red circle expand from button) ━━ */
-#launch-overlay{position:fixed;inset:0;z-index:99999;pointer-events:none;overflow:hidden}
-#launch-overlay .lo-circle{position:absolute;width:60px;height:60px;border-radius:50%;background:var(--red);transform:translate(-50%,-50%) scale(0);will-change:transform}
-#launch-overlay .lo-center{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:0.5rem;opacity:0;transition:opacity 0.25s 0.3s}
+/* ━━ Launch overlay ━━ */
+#launch-overlay{position:fixed;z-index:99999;pointer-events:none;background:var(--red);border-radius:50px;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:0.5rem;overflow:hidden;transition:top 0.5s cubic-bezier(0.4,0,0,1),left 0.5s cubic-bezier(0.4,0,0,1),width 0.5s cubic-bezier(0.4,0,0,1),height 0.5s cubic-bezier(0.4,0,0,1),border-radius 0.5s cubic-bezier(0.4,0,0,1)}
+#launch-overlay .lo-center{opacity:0;display:flex;flex-direction:column;align-items:center;gap:0.5rem;transition:opacity 0.2s 0.35s}
 #launch-overlay.go .lo-center{opacity:1}
-#launch-overlay .lo-name{font-size:1.5rem;font-weight:900;color:#fff}
+#launch-overlay .lo-name{font-size:1.5rem;font-weight:900;color:#fff;white-space:nowrap}
 #launch-overlay .lo-spin{width:20px;height:20px;border:2px solid rgba(255,255,255,0.3);border-top-color:#fff;border-radius:50%;animation:sp 0.7s linear infinite}
 @keyframes sp{to{transform:rotate(360deg)}}
 
@@ -512,9 +511,8 @@ footer .motto{color:rgba(255,255,255,0.6);font-size:0.9rem;margin:0.8rem 0}
   <a href="/app" onclick="return go(event)" class="btn btn-red">立即诊断</a>
 </div>
 
-<!-- ━━ LAUNCH OVERLAY (red circle expand) ━━ -->
-<div id="launch-overlay">
-  <div class="lo-circle"></div>
+<!-- ━━ LAUNCH OVERLAY ━━ -->
+<div id="launch-overlay" style="top:0;left:0;width:0;height:0">
   <div class="lo-center">
     <div class="lo-name">薯医 NoteRx</div>
     <div class="lo-spin"></div>
@@ -525,29 +523,27 @@ footer .motto{color:rgba(255,255,255,0.6);font-size:0.9rem;margin:0.8rem 0}
 // Launch transition
 function go(e){
   e.preventDefault();
+  var btn=e.currentTarget;
+  var r=btn.getBoundingClientRect();
   var o=document.getElementById('launch-overlay');
-  var c=o.querySelector('.lo-circle');
-  var r=e.currentTarget.getBoundingClientRect();
-  var cx=r.left+r.width/2, cy=r.top+r.height/2;
-  // position circle at button center
-  c.style.left=cx+'px';
-  c.style.top=cy+'px';
-  // calculate scale to cover entire viewport from this point
-  var maxDist=Math.max(
-    Math.hypot(cx,cy),
-    Math.hypot(window.innerWidth-cx,cy),
-    Math.hypot(cx,window.innerHeight-cy),
-    Math.hypot(window.innerWidth-cx,window.innerHeight-cy)
-  );
-  var scale=maxDist*2.5/30; // 30 = radius of 60px circle
-  // animate
-  c.style.transition='none';
-  c.style.transform='translate(-50%,-50%) scale(0)';
-  void c.offsetWidth; // force reflow
-  c.style.transition='transform 0.5s cubic-bezier(0.4,0,0,1)';
-  c.style.transform='translate(-50%,-50%) scale('+scale+')';
+  // Frame 1: overlay matches button exactly
+  o.style.transition='none';
+  o.style.top=r.top+'px';
+  o.style.left=r.left+'px';
+  o.style.width=r.width+'px';
+  o.style.height=r.height+'px';
+  o.style.borderRadius=getComputedStyle(btn).borderRadius||'10px';
+  o.style.pointerEvents='all';
+  void o.offsetWidth;
+  // Frame 2: expand to fullscreen
+  o.style.transition='top 0.45s cubic-bezier(0.4,0,0,1),left 0.45s cubic-bezier(0.4,0,0,1),width 0.45s cubic-bezier(0.4,0,0,1),height 0.45s cubic-bezier(0.4,0,0,1),border-radius 0.35s ease';
+  o.style.top='0px';
+  o.style.left='0px';
+  o.style.width='100vw';
+  o.style.height='100vh';
+  o.style.borderRadius='0';
   o.classList.add('go');
-  setTimeout(function(){window.location.href='/app'},900);
+  setTimeout(function(){window.location.href='/app'},850);
   return false;
 }
 
