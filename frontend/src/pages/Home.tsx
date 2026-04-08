@@ -346,21 +346,7 @@ export default function Home() {
   );
   const hasDetailScreenshot = recognizedSlots.has("content");
   const canSubmit = files.length > 0 && title.trim().length > 0 && !lockInputs && !isFormBlocked;
-  const aiSuggestion = useMemo(() => {
-    if (files.length === 0) return "";
-    if (!allRecognitionDone) return "";
-    const hasBody = Boolean(content.trim() || aggregated.bestContent);
-    const hasCover = recognizedSlots.has("cover");
-    const hasProfile = recognizedSlots.has("profile");
-    const hasComments = recognizedSlots.has("comments");
-
-    if (!hasDetailScreenshot) return "建议补充笔记详情页截图（含标题+正文），AI 提取效果更好。也可手动输入后直接诊断。";
-    if (!hasBody) return "已检测到详情页，但正文仍不清晰，建议补充一张更清晰的详情截图。";
-    if (!hasCover) return "可补充封面截图，提升视觉内容判断。";
-    if (!hasProfile) return "可补充主页截图，帮助判断账号定位。";
-    if (!hasComments) return "可补充评论区截图，分析互动质量。";
-    return "信息较完整，可以直接开始诊断。";
-  }, [files.length, allRecognitionDone, content, aggregated.bestContent, recognizedSlots, hasDetailScreenshot]);
+  /* aiSuggestion removed — detail screenshot warning shown inline below CTA */
   const slotLabelMap: Record<string, string> = {
     content: "详情",
     cover: "封面",
