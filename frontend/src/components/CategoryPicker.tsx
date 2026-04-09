@@ -5,15 +5,13 @@ interface Props {
   onChange: (v: string) => void;
 }
 
+/* 只保留白皮书/论文中有真实回归数据的 5 个品类 */
 const CATEGORIES = [
   { key: "food", label: "美食" },
   { key: "fashion", label: "穿搭" },
   { key: "tech", label: "科技" },
   { key: "travel", label: "旅行" },
-  { key: "beauty", label: "美妆" },
-  { key: "fitness", label: "健身" },
   { key: "lifestyle", label: "生活" },
-  { key: "home", label: "家居" },
 ];
 
 export default function CategoryPicker({ value, onChange }: Props) {
