@@ -350,13 +350,32 @@ async def _vision_call(
     except asyncio.TimeoutError:
         return {"error": "视觉识别超时(60s)", "slot_type": "other"}
     raw = resp.choices[0].message.content or ""
+    # Try multiple JSON extraction strategies
     clean = raw.strip()
+    # 1) Remove markdown code fence
     if clean.startswith("```"):
         clean = clean.split("\n", 1)[-1].rsplit("```", 1)[0].strip()
+    # 2) Direct parse
     try:
         return json.loads(clean)
     except json.JSONDecodeError:
-        return {"raw_text": raw, "error": "JSON解析失败"}
+        pass
+    # 3) Use enhanced parser from base_agent (handles thinking tags, raw_decode)
+    try:
+        from app.agents.base_agent import _parse_json_from_llm_text
+        return _parse_json_from_llm_text(raw)
+    except Exception:
+        pass
+    # 4) Last resort: find first { ... } manually
+    left = raw.find("{")
+    right = raw.rfind("}")
+    if left != -1 and right > left:
+        try:
+            return json.loads(raw[left:right + 1])
+        except json.JSONDecodeError:
+            pass
+    logger.warning("快识视觉JSON解析全部失败, 原始输出前300字: %s", raw[:300])
+    return {"raw_text": raw[:200], "error": "JSON解析失败"}
 
 
 def _sanitize_video_derived_title(result: dict) -> None:
