@@ -125,14 +125,26 @@ export default function DiagnoseCard({ report, title }: Props) {
           ))}
         </div>
 
-        {/* Issues */}
+        {/* Issues or Suggestions */}
         <div style={{ padding: "12px 24px", borderTop: "1px solid #f0f0f0" }}>
           <div style={{ fontSize: 10, fontWeight: 600, color: "#999", marginBottom: 6 }}>主要发现</div>
-          {report.issues.slice(0, 3).map((issue, i) => (
-            <div key={i} style={{ fontSize: 11, color: "#555", lineHeight: 1.5, marginBottom: 2 }}>
-              {i + 1}. {typeof issue === "string" ? issue : issue.description}
-            </div>
-          ))}
+          {(() => {
+            // Try issues first, fallback to suggestions
+            const items = (report.issues || [])
+              .map(it => typeof it === "string" ? it : (it.description || ""))
+              .filter(Boolean);
+            const fallback = items.length === 0
+              ? (report.suggestions || []).map(s => typeof s === "string" ? s : (s.description || "")).filter(Boolean)
+              : items;
+            return fallback.slice(0, 3).map((text, i) => (
+              <div key={i} style={{ fontSize: 11, color: "#555", lineHeight: 1.5, marginBottom: 3 }}>
+                {i + 1}. {text}
+              </div>
+            ));
+          })()}
+          {(report.issues || []).length === 0 && (report.suggestions || []).length === 0 && (
+            <div style={{ fontSize: 11, color: "#bbb" }}>暂无详细诊断数据</div>
+          )}
         </div>
 
         {/* Footer */}
