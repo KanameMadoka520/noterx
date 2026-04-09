@@ -31,7 +31,7 @@ function agentInitial(name: string): string {
 
 export default function AgentDebate({ opinions, summary, timeline }: Props) {
   const [expandedIdx, setExpandedIdx] = useState<number | null>(null);
-  const [showAllTimeline, setShowAllTimeline] = useState(false);
+  const [showAllTimeline, setShowAllTimeline] = useState(true);
 
   return (
     <Stack spacing={2}>
