@@ -10,7 +10,7 @@ import ReplayIcon from "@mui/icons-material/Replay";
 import ArrowForwardIcon from "@mui/icons-material/ArrowForward";
 import { motion } from "framer-motion";
 import type { DiagnoseResult, PreScoreResult, OptimizePlan } from "../utils/api";
-import { saveHistory, preScore, optimizeDiagnosis } from "../utils/api";
+import { preScore, optimizeDiagnosis } from "../utils/api";
 import AutoFixHighIcon from "@mui/icons-material/AutoFixHigh";
 import StarIcon from "@mui/icons-material/Star";
 import CircularProgress from "@mui/material/CircularProgress";
@@ -67,16 +67,7 @@ export default function Report() {
         report,
         params: params as Record<string, unknown>,
       });
-      try {
-        const { id } = await saveHistory({
-          title: params.title,
-          category: params.category,
-          report,
-        });
-        await replacePendingWithServerId(pendingId, id);
-      } catch {
-        /* 仅保留本地 IndexedDB（pending id） */
-      }
+      // 不再上传到服务端（修复 #58 历史记录共享问题），仅保留本地
     })();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 

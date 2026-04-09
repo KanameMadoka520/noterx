@@ -205,6 +205,74 @@ footer .motto{color:rgba(255,255,255,0.6);font-size:0.9rem;margin:0.8rem 0}
   </div>
 </section>
 
+<!-- ━━ TECH ARCHITECTURE ━━ -->
+<section class="dark-sec" id="architecture">
+  <div style="max-width:960px;margin:0 auto">
+    <div class="rv">
+      <div class="sec-tag" style="color:rgba(255,255,255,0.5)">Architecture</div>
+      <h2>工作原理：四阶段诊断引擎</h2>
+      <p style="color:rgba(255,255,255,0.6)" class="lead">
+        从数据采集到最终报告，每一步都有 AI 参与。不是简单的"GPT 套壳"——是一套完整的<strong style="color:#fff">多智能体协同诊断系统</strong>。
+      </p>
+    </div>
+
+    <!-- 4-stage flow -->
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:1rem;margin:2.5rem 0" class="rv">
+      <div class="card" style="background:rgba(255,255,255,0.05);border-color:rgba(255,255,255,0.08);text-align:center">
+        <div style="font-size:2rem;margin-bottom:0.5rem">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#ff2442" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="M3 9h18M9 3v18"/></svg>
+        </div>
+        <div style="font-size:0.65rem;font-weight:700;color:var(--red);letter-spacing:0.1em;margin-bottom:0.3rem">STAGE 1</div>
+        <h4 style="color:#fff;font-size:1rem">数据训练</h4>
+        <p style="color:rgba(255,255,255,0.5);font-size:0.82rem">874 条真实笔记 + 2465 条评论<br>Spearman · 回归 · K-Means<br>5 品类差异化基线</p>
+      </div>
+      <div class="card" style="background:rgba(255,255,255,0.05);border-color:rgba(255,255,255,0.08);text-align:center">
+        <div style="font-size:2rem;margin-bottom:0.5rem">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#ff2442" stroke-width="1.5"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>
+        </div>
+        <div style="font-size:0.65rem;font-weight:700;color:var(--red);letter-spacing:0.1em;margin-bottom:0.3rem">STAGE 2</div>
+        <h4 style="color:#fff;font-size:1rem">Model A 初评</h4>
+        <p style="color:rgba(255,255,255,0.5);font-size:0.82rem">回归系数 → 品类权重<br>5 维度即时打分 &lt;50ms<br>无 LLM 调用，纯数学</p>
+      </div>
+      <div class="card" style="background:rgba(255,255,255,0.05);border-color:rgba(255,255,255,0.08);text-align:center">
+        <div style="font-size:2rem;margin-bottom:0.5rem">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#ff2442" stroke-width="1.5"><circle cx="8" cy="8" r="3"/><circle cx="16" cy="8" r="3"/><circle cx="8" cy="16" r="3"/><circle cx="16" cy="16" r="3"/><path d="M11 8h2M8 11v2M16 11v2M11 16h2"/></svg>
+        </div>
+        <div style="font-size:0.65rem;font-weight:700;color:var(--red);letter-spacing:0.1em;margin-bottom:0.3rem">STAGE 3</div>
+        <h4 style="color:#fff;font-size:1rem">多 Agent 辩论</h4>
+        <p style="color:rgba(255,255,255,0.5);font-size:0.82rem">4 Agent 并行诊断<br>交叉质疑 · 补充论据<br>裁判 Agent 综合裁定</p>
+      </div>
+      <div class="card" style="background:rgba(255,255,255,0.05);border-color:rgba(255,255,255,0.08);text-align:center">
+        <div style="font-size:2rem;margin-bottom:0.5rem">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#ff2442" stroke-width="1.5"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+        </div>
+        <div style="font-size:0.65rem;font-weight:700;color:var(--red);letter-spacing:0.1em;margin-bottom:0.3rem">STAGE 4</div>
+        <h4 style="color:#fff;font-size:1rem">AI 闭环</h4>
+        <p style="color:rgba(255,255,255,0.5);font-size:0.82rem">LLM 参与数据清洗<br>AI 生成优化方案<br>评分重算验证效果</p>
+      </div>
+    </div>
+
+    <!-- Tech names -->
+    <div class="rv" style="margin-top:2rem">
+      <div class="quote" style="background:rgba(255,36,66,0.1);border-left-color:#ff2442">
+        <strong>Multi-Agent Collaborative Diagnosis Engine</strong> — 多智能体协同诊断引擎<br>
+        <strong>Baseline Knowledge Graph</strong> — 品类基线知识图谱<br>
+        <strong>Cross-Validation Debate Mechanism</strong> — 交叉验证辩论机制<br>
+        <strong>AI-in-the-Loop Data Flywheel</strong> — AI 数据飞轮
+      </div>
+    </div>
+
+    <!-- Key numbers -->
+    <div style="display:flex;justify-content:center;gap:clamp(1.5rem,5vw,3rem);flex-wrap:wrap;margin-top:2rem" class="rv">
+      <div style="text-align:center"><div style="font-size:1.8rem;font-weight:900;color:var(--red)">874</div><div style="font-size:0.7rem;color:rgba(255,255,255,0.4)">训练样本</div></div>
+      <div style="text-align:center"><div style="font-size:1.8rem;font-weight:900;color:var(--red)">5</div><div style="font-size:0.7rem;color:rgba(255,255,255,0.4)">品类基线</div></div>
+      <div style="text-align:center"><div style="font-size:1.8rem;font-weight:900;color:var(--red)">4+1</div><div style="font-size:0.7rem;color:rgba(255,255,255,0.4)">Agent 辩论</div></div>
+      <div style="text-align:center"><div style="font-size:1.8rem;font-weight:900;color:var(--red)">3</div><div style="font-size:0.7rem;color:rgba(255,255,255,0.4)">轮辩论</div></div>
+      <div style="text-align:center"><div style="font-size:1.8rem;font-weight:900;color:var(--red)">&lt;50ms</div><div style="font-size:0.7rem;color:rgba(255,255,255,0.4)">初评速度</div></div>
+    </div>
+  </div>
+</section>
+
 <!-- ━━ KEY FINDINGS ━━ -->
 <section id="findings">
   <div class="rv">

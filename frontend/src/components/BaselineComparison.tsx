@@ -24,8 +24,10 @@ export default function BaselineComparison({ category, userTitle, userTags }: Pr
     let cancelled = false;
     (async () => {
       try {
-        const data = await getBaseline(category);
+        const raw = await getBaseline(category);
         if (cancelled) return;
+        // API returns { category, stats: { ... } } — unwrap
+        const data = raw.stats || raw;
 
         const m: Metric[] = [
           {

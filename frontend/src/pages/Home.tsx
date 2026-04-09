@@ -324,8 +324,13 @@ export default function Home() {
   const lockInputs = !!processingStatus && processingStatus.label !== "已就绪";
   const isFormBlocked = files.length > 0 && !allRecognitionDone;
 
+  const [submitError, setSubmitError] = useState("");
+
   const handleSubmit = () => {
-    if (!canSubmit) return;
+    if (files.length === 0) { setSubmitError("请先上传笔记截图"); return; }
+    if (!title.trim()) { setSubmitError("请输入笔记标题"); return; }
+    if (lockInputs || isFormBlocked) { setSubmitError("AI 识别中，请稍等"); return; }
+    setSubmitError("");
     navigate("/diagnosing", {
       state: {
         title, content, tags: "", category,
@@ -359,11 +364,12 @@ export default function Home() {
 
   return (
     <Box sx={{
-      height: "100dvh",
+      height: { md: "100dvh" },
+      minHeight: { xs: "100dvh" },
       display: "flex",
       flexDirection: "column",
       bgcolor: "#fafafa",
-      overflow: "hidden",
+      overflow: { xs: "auto", md: "hidden" },
     }}>
 
       {/* ═══ Header — 所有信息压在一行 ═══ */}
@@ -419,7 +425,7 @@ export default function Home() {
         display: "flex", justifyContent: "center", alignItems: "stretch",
         px: { xs: 0, md: 3 },
         py: { xs: 0, md: 2 },
-        pb: { xs: "68px", md: 2 },
+        pb: { xs: "100px", md: 2 },
         overflow: { xs: "auto", md: "hidden" },
         minHeight: 0,
       }}>
@@ -587,16 +593,22 @@ export default function Home() {
         pb: "max(8px, env(safe-area-inset-bottom))",
         bgcolor: "rgba(255,255,255,0.95)", borderTop: "1px solid #f0f0f0",
       }}>
-        <Button variant="contained" fullWidth disabled={!canSubmit} onClick={handleSubmit}
+        <Button variant="contained" fullWidth onClick={handleSubmit}
           sx={{
             py: 1.1, fontSize: 15, fontWeight: 700, borderRadius: "10px", minHeight: 46,
-            background: "#ff2442", boxShadow: "0 4px 16px rgba(255,36,66,0.25)",
-            "&:hover": { background: "#e61e3d" },
-            "&.Mui-disabled": { background: "#eee", boxShadow: "none", color: "#bbb" },
+            background: canSubmit ? "#ff2442" : "#eee",
+            boxShadow: canSubmit ? "0 4px 16px rgba(255,36,66,0.25)" : "none",
+            color: canSubmit ? "#fff" : "#bbb",
+            "&:hover": { background: canSubmit ? "#e61e3d" : "#eee" },
           }}
         >
           开始诊断
         </Button>
+        {submitError && (
+          <Typography sx={{ fontSize: 11, color: "#dc2626", textAlign: "center", mt: 0.5 }}>
+            {submitError}
+          </Typography>
+        )}
       </Box>
 
       {/* Transition overlay */}
