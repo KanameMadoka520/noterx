@@ -75,8 +75,15 @@ async def optimize(req: OptimizeRequest):
     if not isinstance(plans, list):
         plans = []
 
-    # Auto-score each plan with pre_score
+    # Score original with pre_score first (same system as plans)
     tag_count = 0
+    try:
+        orig_result = pre_score(req.title, req.content, req.category, tag_count, 0)
+        orig_score = orig_result["total_score"]
+    except Exception:
+        orig_score = req.overall_score
+
+    # Auto-score each plan with pre_score
     scored_plans = []
     for plan in plans[:3]:
         if not isinstance(plan, dict):
@@ -87,14 +94,15 @@ async def optimize(req: OptimizeRequest):
             score_result = pre_score(title, content, req.category, tag_count, 0)
             plan_score = score_result["total_score"]
         except Exception:
-            plan_score = req.overall_score + 5  # fallback
+            plan_score = orig_score + 5  # fallback
+        delta = round(plan_score - orig_score)
         scored_plans.append({
             "strategy": plan.get("strategy", "优化方案"),
             "optimized_title": title,
             "optimized_content": content,
             "key_changes": plan.get("key_changes", ""),
             "score": round(plan_score),
-            "score_delta": round(plan_score - req.overall_score),
+            "score_delta": max(delta, 0),  # 不显示负数
         })
 
     # Sort by score descending
@@ -105,6 +113,6 @@ async def optimize(req: OptimizeRequest):
         scored_plans[0]["recommended"] = True
 
     return {
-        "original_score": round(req.overall_score),
+        "original_score": round(orig_score),
         "plans": scored_plans,
     }
