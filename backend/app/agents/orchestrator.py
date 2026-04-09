@@ -28,6 +28,65 @@ from app.agents.prompts.debate import DEBATE_PROMPT
 logger = logging.getLogger("noterx.orchestrator")
 
 
+def _clamp_score(value: float) -> float:
+    """Clamp to 0-100 and round to 1 decimal."""
+    return round(min(max(value, 0.0), 100.0), 1)
+
+
+def _build_stable_scores(
+    model_a_score: dict,
+    content_analysis: dict,
+    image_analysis: dict | None,
+    video_analysis: dict | None,
+) -> dict[str, float]:
+    """
+    从 Model A 预评分 + 文本/图像分析构建确定性雷达分数。
+    不依赖 LLM 输出 → 同一输入永远产出相同分数（from PR #64）。
+    """
+    dims = model_a_score.get("dimensions", {})
+    title_quality = float(dims.get("title_quality", 50))
+    content_quality = float(dims.get("content_quality", 50))
+    visual_quality = float(dims.get("visual_quality", 50))
+    tag_strategy = float(dims.get("tag_strategy", 50))
+    engagement_potential = float(dims.get("engagement_potential", 50))
+
+    readability = float(content_analysis.get("readability_score", 0))
+    info_density = float(content_analysis.get("info_density", 0)) * 100
+    content_score = _clamp_score(
+        title_quality * 0.25 + content_quality * 0.55
+        + readability * 0.12 + info_density * 0.08
+    )
+
+    if image_analysis:
+        saturation = float(image_analysis.get("saturation", 0)) * 100
+        text_ratio = float(image_analysis.get("text_ratio", 0))
+        text_balance = max(0.0, 100.0 - abs(text_ratio - 0.22) * 260.0)
+        face_bonus = 8.0 if image_analysis.get("has_face") else 0.0
+        visual_score = _clamp_score(
+            visual_quality * 0.7 + saturation * 0.15
+            + text_balance * 0.15 + face_bonus
+        )
+    elif video_analysis:
+        face_bonus = 8.0 if video_analysis.get("has_face") else 0.0
+        visual_score = _clamp_score(visual_quality * 0.85 + 10.0 + face_bonus)
+    else:
+        visual_score = _clamp_score(visual_quality)
+
+    growth_score = _clamp_score(tag_strategy * 0.55 + engagement_potential * 0.45)
+    user_reaction_score = _clamp_score(
+        content_score * 0.35 + visual_score * 0.2 + growth_score * 0.45
+    )
+    overall_score = _clamp_score(float(model_a_score.get("total_score", 50)))
+
+    return {
+        "content": content_score,
+        "visual": visual_score,
+        "growth": growth_score,
+        "user_reaction": user_reaction_score,
+        "overall": overall_score,
+    }
+
+
 def _normalize_issues_items(raw: list | None) -> list[dict]:
     """
     将 issues 统一为 list[dict]，满足 DiagnoseResponse；
@@ -153,7 +212,14 @@ class Orchestrator:
             image_count=image_analysis.get("image_count", 0) if image_analysis else 0,
         )
         baseline_comparison["model_a_pre_score"] = model_a_score
-        logger.info("Model A 预评分: %.1f (%s)", model_a_score["total_score"], model_a_score["level"])
+        # 确定性雷达分数（不依赖LLM，同一输入永远相同）
+        stable_scores = _build_stable_scores(
+            model_a_score=model_a_score,
+            content_analysis=content_analysis,
+            image_analysis=image_analysis,
+            video_analysis=video_analysis,
+        )
+        logger.info("Model A 预评分: %.1f (%s), stable_scores=%s", model_a_score["total_score"], model_a_score["level"], stable_scores)
         await _emit_progress("baseline_done", "基线对比完成，开始专家诊断")
 
         # --- Step 3: 并行 Agent 诊断（Round 1）---
@@ -276,7 +342,8 @@ class Orchestrator:
                      total_time, round1_tokens + debate_tokens + judge_tokens)
 
         result = self._assemble_response(
-            final_report, agent_opinions, simulated_comments, debate_timeline
+            final_report, agent_opinions, simulated_comments, debate_timeline,
+            stable_scores=stable_scores,
         )
         result["model_a_pre_score"] = model_a_score
         return result
@@ -328,28 +395,35 @@ class Orchestrator:
                 timeline.append({"round": 2, "agent_name": name, "kind": "add", "text": text})
         return timeline
 
-    def _assemble_response(self, final_report, agent_opinions, simulated_comments, debate_timeline) -> dict:
-        radar = final_report.get("radar_data", {})
+    def _assemble_response(self, final_report, agent_opinions, simulated_comments, debate_timeline, stable_scores=None) -> dict:
         is_llm_error = final_report.get("dimension") == "error"
-        if not radar:
-            scores = {op.get("dimension", "unknown"): op.get("score", 0) for op in agent_opinions}
-            radar = {
-                "content": scores.get("内容质量", 50),
-                "visual": scores.get("视觉表现", 50),
-                "growth": scores.get("增长策略", 50),
-                "user_reaction": scores.get("用户反应", 50),
-                "overall": final_report.get("overall_score", 50),
-            }
+
+        # 使用确定性 stable_scores 作为雷达分数（不依赖 LLM 输出，#52 评分稳定性）
+        if stable_scores:
+            radar = {k: _clamp_score(v) for k, v in stable_scores.items()}
+        else:
+            radar = final_report.get("radar_data", {})
+            if not radar:
+                scores = {op.get("dimension", "unknown"): op.get("score", 0) for op in agent_opinions}
+                radar = {
+                    "content": scores.get("内容质量", 50),
+                    "visual": scores.get("视觉表现", 50),
+                    "growth": scores.get("增长策略", 50),
+                    "user_reaction": scores.get("用户反应", 50),
+                    "overall": final_report.get("overall_score", 50),
+                }
+            for k in radar:
+                radar[k] = round(max(0, min(100, float(radar[k]))))
 
         if is_llm_error and final_report.get("overall_score") is None:
             overall_score = float(final_report.get("score", 0))
         else:
             overall_score = float(final_report.get("overall_score", 50))
-        # Clamp score to 0-100 and round to integer for stability
-        overall_score = round(max(0, min(100, overall_score)))
-        # Clamp radar dimensions too
-        for k in radar_data:
-            radar_data[k] = round(max(0, min(100, float(radar_data[k]))))
+        # Use stable overall if available
+        if stable_scores:
+            overall_score = round(stable_scores.get("overall", overall_score))
+        else:
+            overall_score = round(max(0, min(100, overall_score)))
         grade = final_report.get("grade") if not is_llm_error else "D"
         if not grade:
             grade = self._calc_grade(overall_score)

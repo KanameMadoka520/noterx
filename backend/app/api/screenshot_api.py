@@ -290,7 +290,7 @@ async def _video_url_quick_call(client, video_url: str) -> dict:
     消息体对齐：https://platform.xiaomimimo.com/#/docs/usage-guide/multimodal-understanding/video-understanding
     """
     resolved_model = os.getenv("LLM_MODEL_OMNI", "mimo-v2-omni")
-    out_cap = int(os.getenv("QUICK_RECOGNIZE_VIDEO_MAX_COMPLETION_TOKENS", "2000"))
+    out_cap = int(os.getenv("QUICK_RECOGNIZE_VIDEO_MAX_COMPLETION_TOKENS", "32768"))
     video_part = build_mimo_video_url_content_part(video_url)
     kwargs = {
         "model": resolved_model,
@@ -379,8 +379,8 @@ async def quick_recognize(
         prompt += f"\n提示：用户表明这是一张「{SLOT_LABELS[slot_hint]}」。"
 
     # 快识走 _vision_call 默认 LLM_MODEL_OMNI（多模态）；勿单独改用纯文本模型。
-    quick_max_out = int(os.getenv("QUICK_RECOGNIZE_MAX_COMPLETION_TOKENS", "1200"))
-    ocr_cap = int(os.getenv("QUICK_RECOGNIZE_OCR_MAX_TOKENS", "512"))
+    quick_max_out = int(os.getenv("QUICK_RECOGNIZE_MAX_COMPLETION_TOKENS", "32768"))
+    ocr_cap = int(os.getenv("QUICK_RECOGNIZE_OCR_MAX_TOKENS", "32768"))
 
     try:
         result = await _vision_call(
@@ -435,8 +435,8 @@ async def quick_recognize_video(request: Request, file: UploadFile = File(...)):
     mime = (file.content_type or "video/mp4").strip()
     container_ext = MIME_TO_EXT.get(mime, ".mp4")
     client = _get_client()
-    quick_max_out = int(os.getenv("QUICK_RECOGNIZE_MAX_COMPLETION_TOKENS", "1200"))
-    ocr_cap = int(os.getenv("QUICK_RECOGNIZE_OCR_MAX_TOKENS", "512"))
+    quick_max_out = int(os.getenv("QUICK_RECOGNIZE_MAX_COMPLETION_TOKENS", "32768"))
+    ocr_cap = int(os.getenv("QUICK_RECOGNIZE_OCR_MAX_TOKENS", "32768"))
 
     result: dict = {}
     try_mimo_video_url = mime in MIMO_VIDEO_MIME and not public_base_url_is_localhost_only(request)
