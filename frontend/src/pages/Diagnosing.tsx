@@ -5,7 +5,6 @@ import { Box, Typography } from "@mui/material";
 import CheckCircleOutlinedIcon from "@mui/icons-material/CheckCircleOutlined";
 import { preScore, diagnoseStream, diagnoseNote } from "../utils/api";
 import type { DiagnoseResult, PreScoreResult, StreamEvent } from "../utils/api";
-import { saveHistory } from "../utils/api";
 import { FALLBACK_REPORT } from "../utils/fallback";
 
 /* ── Dimension labels ── */
@@ -247,10 +246,6 @@ export default function Diagnosing() {
         }
       }
       apiDone.current = true;
-      if (!cancelled) {
-        saveHistory({ title: params.title, category: params.category, report: resultRef.current!.report as DiagnoseResult })
-          .catch(() => {});
-      }
     })();
 
     // Step timer (fills gaps between real events)

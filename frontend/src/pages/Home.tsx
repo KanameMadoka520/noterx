@@ -1,6 +1,7 @@
 ﻿import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
+import axios from "axios";
 import {
   Box, Typography, TextField, Button, Chip,
   CircularProgress, useTheme,
@@ -10,7 +11,7 @@ import HistoryOutlined from "@mui/icons-material/HistoryOutlined";
 import CheckCircleIcon from "@mui/icons-material/CheckCircle";
 import CategoryPicker from "../components/CategoryPicker";
 import UploadZone from "../components/UploadZone";
-import { quickRecognize } from "../utils/api";
+import { quickRecognize, quickRecognizeVideo } from "../utils/api";
 import type { QuickRecognizeResult } from "../utils/api";
 
 /** @returns A stable key for a File object */
@@ -154,22 +155,36 @@ export default function Home() {
     [files],
   );
 
+  /** 待快识的视频（与 UploadZone 一致，至多一个视频位） */
+  const videoFileKeys = useMemo(
+    () => new Set(files.filter((f) => f.type.startsWith("video/")).map(fkey)),
+    [files],
+  );
+
+  /** 图片 + 视频均需完成快识后解锁表单 */
+  const recognizeFileKeys = useMemo(() => {
+    const s = new Set<string>();
+    imageFileKeys.forEach((k) => s.add(k));
+    videoFileKeys.forEach((k) => s.add(k));
+    return s;
+  }, [imageFileKeys, videoFileKeys]);
+
   const pendingRecognition = useMemo(() => {
-    if (imageFileKeys.size === 0) return false;
-    for (const key of imageFileKeys) {
+    if (recognizeFileKeys.size === 0) return false;
+    for (const key of recognizeFileKeys) {
       if (aiLoading[key] || !aiRecogs[key]) return true;
     }
     return false;
-  }, [imageFileKeys, aiLoading, aiRecogs]);
+  }, [recognizeFileKeys, aiLoading, aiRecogs]);
 
   const allRecognitionDone = useMemo(() => {
-    if (imageFileKeys.size === 0) return false;
-    for (const k of imageFileKeys) {
+    if (recognizeFileKeys.size === 0) return true;
+    for (const k of recognizeFileKeys) {
       if (!aiRecogs[k] && !aiLoading[k]) return false;
       if (aiLoading[k]) return false;
     }
     return true;
-  }, [imageFileKeys, aiRecogs, aiLoading]);
+  }, [recognizeFileKeys, aiRecogs, aiLoading]);
 
   useEffect(() => {
     const { bestTitle, bestContent, bestCategory } = aggregated;
@@ -188,6 +203,14 @@ export default function Home() {
 
   const allFailed = allRecognitionDone && successResults.length === 0 && allResults.length > 0;
 
+  /** 全部失败时展示首条错误，便于区分「未连上后端」与「模型未识别出内容」 */
+  const firstRecognitionError = useMemo(() => {
+    for (const r of allResults) {
+      if (!r.success && r.error?.trim()) return r.error.trim();
+    }
+    return "";
+  }, [allResults]);
+
   const showWarnings = allRecognitionDone && files.length > 0 && !allFailed;
   const warnings = useMemo(() => {
     if (!showWarnings) return { title: false, content: false, category: false };
@@ -200,9 +223,10 @@ export default function Home() {
   }, [showWarnings, aggregated]);
 
   const autoFilled = useMemo(() => {
-    const { bestTitle, bestContent, bestCategory, bestSummary } = aggregated;
+    const { bestTitle, bestContent, bestCategory } = aggregated;
     return {
-      title: !userEdited.title && !!(bestTitle || bestSummary),
+      /** 仅当有可写入标题的识别字段时标「已填」；仅有 summary 不会写入标题，避免空框却显示已填 */
+      title: !userEdited.title && !!bestTitle,
       content: !userEdited.content && !!bestContent,
       category: !userEdited.category && !!bestCategory && !!CAT_MAP[bestCategory],
     };
@@ -217,12 +241,35 @@ export default function Home() {
       return { ...p, [key]: true };
     });
     try {
-      const res = await quickRecognize(file, slotHint);
+      const res = file.type.startsWith("video/")
+        ? await quickRecognizeVideo(file)
+        : await quickRecognize(file, slotHint);
       setAiRecogs((p) => ({ ...p, [key]: res }));
-    } catch {
+    } catch (e: unknown) {
+      let errMsg = "识别失败";
+      if (axios.isAxiosError(e)) {
+        const d = e.response?.data;
+        if (d && typeof d === "object" && "detail" in d) {
+          const det = (d as { detail: unknown }).detail;
+          errMsg = typeof det === "string" ? det : JSON.stringify(det);
+        } else if (e.code === "ERR_NETWORK" || e.message === "Network Error") {
+          errMsg = "无法连接后端：请确认已启动 API，且端口与 Vite 代理一致（默认 8000，可用 VITE_API_PROXY_TARGET 覆盖）";
+        } else if (e.message) {
+          errMsg = e.message;
+        }
+      } else if (e instanceof Error && e.message) {
+        errMsg = e.message;
+      }
       setAiRecogs((p) => ({
         ...p,
-        [key]: { success: false, slot_type: "unknown", extra_slots: [], category: "", summary: "", error: "识别失败" },
+        [key]: {
+          success: false,
+          slot_type: "unknown",
+          extra_slots: [],
+          category: "",
+          summary: "",
+          error: errMsg,
+        },
       }));
     } finally {
       recognizeInFlightRef.current.delete(key);
@@ -256,10 +303,12 @@ export default function Home() {
   }, [files]);
 
   useEffect(() => {
-    const imageFiles = files.filter((f) => f.type.startsWith("image/"));
-    const inFlight = imageFiles.filter((f) => aiLoading[fkey(f)]).length;
+    const mediaFiles = files.filter(
+      (f) => f.type.startsWith("image/") || f.type.startsWith("video/"),
+    );
+    const inFlight = mediaFiles.filter((f) => aiLoading[fkey(f)]).length;
     const freeSlots = Math.max(0, QUICK_RECOGNIZE_CONCURRENCY - inFlight);
-    const need = imageFiles.filter((f) => {
+    const need = mediaFiles.filter((f) => {
       const k = fkey(f);
       return !aiRecogs[k] && !aiLoading[k];
     });
@@ -274,7 +323,7 @@ export default function Home() {
       analyzePulseTimerRef.current = null;
       setAnalyzingPulse(false);
     }
-    if (prevPendingRecognitionRef.current && !pendingRecognition && imageFileKeys.size > 0) {
+    if (prevPendingRecognitionRef.current && !pendingRecognition && recognizeFileKeys.size > 0) {
       if (analyzePulseTimerRef.current) clearTimeout(analyzePulseTimerRef.current);
       setAnalyzingPulse(true);
       analyzePulseTimerRef.current = setTimeout(() => {
@@ -283,7 +332,7 @@ export default function Home() {
       }, 700);
     }
     prevPendingRecognitionRef.current = pendingRecognition;
-  }, [pendingRecognition, imageFileKeys.size]);
+  }, [pendingRecognition, recognizeFileKeys.size]);
 
   useEffect(() => {
     if (files.length === 0) {
@@ -313,7 +362,12 @@ export default function Home() {
       return { label: "上传中", tone: "info" as const, text: "素材已接收，正在准备识别..." };
     }
     if (pendingRecognition) {
-      return { label: "识别中", tone: "info" as const, text: "AI 正在自动识别封面/详情/主页/评论区..." };
+      const videoPending = [...videoFileKeys].some((k) => aiLoading[k] || !aiRecogs[k]);
+      const imagePending = [...imageFileKeys].some((k) => aiLoading[k] || !aiRecogs[k]);
+      if (videoPending && !imagePending && imageFileKeys.size === 0) {
+        return { label: "识别中", tone: "info" as const, text: "AI 正在识别视频内容（含画面与字幕），请稍候..." };
+      }
+      return { label: "识别中", tone: "info" as const, text: "AI 正在自动识别图片与视频..." };
     }
     if (analyzingPulse) {
       return { label: "分析中", tone: "info" as const, text: "正在汇总识别结果并回填表单..." };
@@ -322,7 +376,17 @@ export default function Home() {
       return { label: "已就绪", tone: "success" as const, text: "识别完成，可以继续发起诊断。" };
     }
     return null;
-  }, [files.length, uploadingPulse, pendingRecognition, analyzingPulse, allRecognitionDone]);
+  }, [
+    files.length,
+    uploadingPulse,
+    pendingRecognition,
+    analyzingPulse,
+    allRecognitionDone,
+    videoFileKeys,
+    imageFileKeys,
+    aiLoading,
+    aiRecogs,
+  ]);
 
   const lockInputs = !!processingStatus && processingStatus.label !== "已就绪";
   const isFormBlocked = files.length > 0 && !allRecognitionDone;
@@ -597,7 +661,11 @@ export default function Home() {
                       <CheckCircleIcon sx={{ fontSize: 15, color: "#10b981" }} />
                     )}
                     <Typography sx={{ fontSize: 12, color: allFailed ? "#dc2626" : "#666", fontWeight: 500 }}>
-                      {allFailed ? "识别失败，请检查后端或手动输入" : processingStatus?.text || "AI 正在识别..."}
+                      {allFailed
+                        ? (firstRecognitionError
+                          ? `识别失败：${firstRecognitionError}`
+                          : "识别失败，请检查后端或手动输入")
+                        : (processingStatus?.text || "AI 正在识别...")}
                     </Typography>
                   </Box>
                 </motion.div>

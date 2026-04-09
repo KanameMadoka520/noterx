@@ -8,12 +8,10 @@ import ContentCopyIcon from "@mui/icons-material/ContentCopy";
 import ReplayIcon from "@mui/icons-material/Replay";
 import { motion } from "framer-motion";
 import type { DiagnoseResult } from "../utils/api";
-import { saveHistory } from "../utils/api";
 import {
   migrateLegacyLocalStorage,
-  createPendingId,
+  createLocalDiagnosisId,
   putLocalDiagnosis,
-  replacePendingWithServerId,
 } from "../utils/localMemory";
 import ScoreCard from "../components/ScoreCard";
 import DimensionBars from "../components/DimensionBars";
@@ -50,9 +48,9 @@ export default function Report() {
     const { report, params } = state;
     void (async () => {
       await migrateLegacyLocalStorage();
-      const pendingId = createPendingId();
+      const id = createLocalDiagnosisId();
       await putLocalDiagnosis({
-        id: pendingId,
+        id,
         serverId: null,
         title: params.title,
         category: params.category,
@@ -62,16 +60,6 @@ export default function Report() {
         report,
         params: params as Record<string, unknown>,
       });
-      try {
-        const { id } = await saveHistory({
-          title: params.title,
-          category: params.category,
-          report,
-        });
-        await replacePendingWithServerId(pendingId, id);
-      } catch {
-        /* 仅保留本地 IndexedDB（pending id） */
-      }
     })();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 

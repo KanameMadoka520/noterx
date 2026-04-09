@@ -16,11 +16,6 @@ import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import DeleteOutlinedIcon from "@mui/icons-material/DeleteOutlined";
 import InboxOutlinedIcon from "@mui/icons-material/InboxOutlined";
 import { motion } from "framer-motion";
-import {
-  getHistoryList,
-  getHistoryDetail,
-  deleteHistory,
-} from "../utils/api";
 import type { HistoryListItem } from "../utils/api";
 import {
   migrateLegacyLocalStorage,
@@ -48,8 +43,19 @@ const GRADE_COLOR: Record<string, string> = {
   D: "#dc2626",
 };
 
+/** 按创建时间倒序 */
+function sortListItems(a: HistoryListItem, b: HistoryListItem): number {
+  const ta = new Date(
+    a.created_at.includes("T") ? a.created_at : a.created_at.replace(" ", "T"),
+  ).getTime();
+  const tb = new Date(
+    b.created_at.includes("T") ? b.created_at : b.created_at.replace(" ", "T"),
+  ).getTime();
+  return tb - ta;
+}
+
 /**
- * 历史记录页
+ * 历史记录页（仅 IndexedDB，不同步服务器）
  */
 export default function History() {
   const navigate = useNavigate();
@@ -60,45 +66,13 @@ export default function History() {
 
   const fetchList = async () => {
     setLoading(true);
-    await migrateLegacyLocalStorage();
     try {
-      const remote = await getHistoryList(50);
+      await migrateLegacyLocalStorage();
       const locals = await listLocalDiagnoses();
-      const byId = new Map<string, HistoryListItem>();
-      for (const r of remote) byId.set(r.id, r);
-      for (const loc of locals) {
-        if (loc.id.startsWith("pending-") || loc.id.startsWith("legacy-")) {
-          byId.set(loc.id, localRecordToListItem(loc));
-        } else if (!byId.has(loc.id)) {
-          byId.set(loc.id, localRecordToListItem(loc));
-        }
-      }
-      const merged = Array.from(byId.values()).sort((a, b) => {
-        const ta = new Date(
-          a.created_at.includes("T") ? a.created_at : a.created_at.replace(" ", "T"),
-        ).getTime();
-        const tb = new Date(
-          b.created_at.includes("T") ? b.created_at : b.created_at.replace(" ", "T"),
-        ).getTime();
-        return tb - ta;
-      });
-      setItems(merged);
+      setItems(locals.map(localRecordToListItem).sort(sortListItems));
     } catch (e) {
-      console.error("获取历史记录失败", e);
-      const locals = await listLocalDiagnoses();
-      setItems(
-        locals
-          .map(localRecordToListItem)
-          .sort(
-            (a, b) =>
-              new Date(
-                b.created_at.includes("T") ? b.created_at : b.created_at.replace(" ", "T"),
-              ).getTime() -
-              new Date(
-                a.created_at.includes("T") ? a.created_at : a.created_at.replace(" ", "T"),
-              ).getTime(),
-          ),
-      );
+      console.error("读取本地历史失败", e);
+      setItems([]);
     } finally {
       setLoading(false);
     }
@@ -108,53 +82,35 @@ export default function History() {
     fetchList();
   }, []);
 
-  /** 点击卡片：加载完整报告后跳转 Report 页 */
+  /** 点击卡片：从 IndexedDB 读完整报告后跳转 Report 页 */
   const handleOpen = async (item: HistoryListItem) => {
     setNavigating(item.id);
     try {
-      if (item.id.startsWith("pending-") || item.id.startsWith("legacy-")) {
-        const rec = await getLocalDiagnosis(item.id);
-        if (!rec) throw new Error("本地记录不存在");
-        const p = rec.params;
-        const title = typeof p.title === "string" ? p.title : rec.title;
-        const category = typeof p.category === "string" ? p.category : rec.category;
-        const content = typeof p.content === "string" ? p.content : undefined;
-        const tags = p.tags;
-        navigate("/report", {
-          state: {
-            report: rec.report,
-            params: { title, category, content, tags },
-            isFallback: false,
-          },
-        });
-        return;
-      }
-      const detail = await getHistoryDetail(item.id);
+      const rec = await getLocalDiagnosis(item.id);
+      if (!rec) throw new Error("本地记录不存在");
+      const p = rec.params;
+      const title = typeof p.title === "string" ? p.title : rec.title;
+      const category = typeof p.category === "string" ? p.category : rec.category;
+      const content = typeof p.content === "string" ? p.content : undefined;
+      const tags = p.tags;
       navigate("/report", {
         state: {
-          report: detail.report,
-          params: { title: detail.title, category: detail.category },
+          report: rec.report,
+          params: { title, category, content, tags },
           isFallback: false,
         },
       });
     } catch (e) {
-      console.error("获取报告详情失败", e);
+      console.error("打开本地记录失败", e);
       setNavigating(null);
     }
   };
 
-  /** 确认删除 */
+  /** 确认删除（仅本地 IndexedDB） */
   const handleDelete = async () => {
     if (!deleteTarget) return;
     try {
       const id = deleteTarget.id;
-      if (!id.startsWith("pending-") && !id.startsWith("legacy-")) {
-        try {
-          await deleteHistory(id);
-        } catch {
-          /* 可能仅本地仍有副本，继续删 IndexedDB */
-        }
-      }
       await deleteLocalDiagnosis(id);
       setItems((prev) => prev.filter((i) => i.id !== id));
     } catch (e) {
@@ -205,9 +161,14 @@ export default function History() {
           >
             首页
           </Button>
-          <Typography sx={{ fontWeight: 700, color: "#262626", fontSize: 16 }}>
-            诊断历史
-          </Typography>
+          <Box sx={{ textAlign: "center" }}>
+            <Typography sx={{ fontWeight: 700, color: "#262626", fontSize: 16 }}>
+              诊断历史
+            </Typography>
+            <Typography sx={{ fontSize: 11, color: "#999", mt: 0.25 }}>
+              仅保存在本机浏览器
+            </Typography>
+          </Box>
           <Box sx={{ width: 64 }} />
         </Box>
       </Box>

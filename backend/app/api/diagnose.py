@@ -11,6 +11,7 @@ import time
 import uuid
 from pathlib import Path
 from typing import Optional
+from urllib.parse import urlparse
 
 from fastapi import APIRouter, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.responses import FileResponse
@@ -21,7 +22,10 @@ router = APIRouter()
 logger = logging.getLogger("noterx.diagnose")
 
 MAX_IMAGE_SIZE = 10 * 1024 * 1024  # 10 MB
-MAX_VIDEO_SIZE = 200 * 1024 * 1024  # 200 MB
+# 视频上传上限（诊断 / 快识 / 深度分析共用）。时长与体积无固定关系，高码率 4K 录屏几十秒即可超百 MB。
+_max_video_mb = int(os.getenv("MAX_VIDEO_UPLOAD_MB", "300"))
+_max_video_mb = max(1, min(_max_video_mb, 1024))
+MAX_VIDEO_SIZE = _max_video_mb * 1024 * 1024
 MAX_IMAGE_COUNT = 9
 ALLOWED_IMAGE_MIME = {"image/jpeg", "image/png", "image/webp", "image/gif"}
 ALLOWED_VIDEO_MIME = {"video/mp4", "video/quicktime", "video/webm", "video/x-matroska", "video/x-msvideo", "video/x-ms-wmv"}
@@ -46,17 +50,24 @@ TEMP_VIDEO_DIR = Path(
 )
 
 
-def _extract_first_video_frame(video_bytes: bytes) -> Optional[bytes]:
-    """Extract the first frame from video bytes as JPEG bytes."""
+def _extract_first_video_frame(
+    video_bytes: bytes,
+    container_suffix: str = ".mp4",
+) -> Optional[bytes]:
+    """
+    从视频字节中抽取首帧为 JPEG。
+    @param container_suffix - 临时文件后缀，需与真实封装一致（如 .mov/.webm），否则 OpenCV 可能打不开
+    """
     try:
         import cv2
     except Exception:
         logger.warning("OpenCV unavailable; skip extracting video frame")
         return None
 
+    suffix = container_suffix if container_suffix.startswith(".") else f".{container_suffix}"
     temp_path = ""
     try:
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as temp_file:
+        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as temp_file:
             temp_file.write(video_bytes)
             temp_path = temp_file.name
 
@@ -134,9 +145,31 @@ def _cleanup_expired_temp_videos(now_ts: Optional[int] = None) -> None:
 
 
 def _build_public_base_url(request: Request) -> str:
+    """
+    生成 MiMo 等云端服务可拉取的 API 根 URL（不含路径）。
+    上线时在反向代理后应配置 X-Forwarded-Proto / X-Forwarded-Host；
+    或显式设置 MIMO_VIDEO_PUBLIC_BASE_URL（推荐固定为对外的 https 域名）。
+    """
     if TEMP_VIDEO_PUBLIC_BASE_URL:
         return TEMP_VIDEO_PUBLIC_BASE_URL
+    proto = (request.headers.get("x-forwarded-proto") or "").split(",")[0].strip().lower()
+    host = (request.headers.get("x-forwarded-host") or "").split(",")[0].strip()
+    if proto and host:
+        return f"{proto}://{host}".rstrip("/")
     return str(request.base_url).rstrip("/")
+
+
+def public_base_url_is_localhost_only(request: Request) -> bool:
+    """
+    判断当前请求推导出的对外基址是否仅为本机（云端模型无法拉取 temp-video）。
+    显式配置了 MIMO_VIDEO_PUBLIC_BASE_URL 时视为已配置公网入口（由运维保证 MiMo 可访问）。
+    """
+    if TEMP_VIDEO_PUBLIC_BASE_URL:
+        return False
+    host = (urlparse(_build_public_base_url(request)).hostname or "").lower()
+    if not host:
+        return False
+    return host in ("localhost", "127.0.0.1", "::1")
 
 
 def _store_temp_video_and_build_url(request: Request, video_bytes: bytes, mime: str) -> str:
@@ -228,17 +261,18 @@ async def diagnose_note(
     video_analysis: Optional[dict] = None
 
     if image_bytes is None and video_bytes is not None:
+        mime_for_video = (video_file.content_type if video_file else None) or "video/mp4"
+        ext = MIME_TO_EXT.get(mime_for_video, ".mp4")
         # Extract first frame as fallback cover image
-        extracted = _extract_first_video_frame(video_bytes)
+        extracted = _extract_first_video_frame(video_bytes, ext)
         if extracted is not None:
             image_bytes = extracted
             logger.info("Using first frame from video for visual analysis")
         else:
             logger.info("Video frame extraction failed, visual baseline may fallback")
 
-        # Try MiMo video understanding via signed temp URL
-        mime_for_video = (video_file.content_type if video_file else None) or "video/mp4"
-        if mime_for_video in MIMO_VIDEO_MIME:
+        # Try MiMo video understanding via signed temp URL（需公网可访问的基址，见 _build_public_base_url）
+        if mime_for_video in MIMO_VIDEO_MIME and not public_base_url_is_localhost_only(request):
             logger.info("Trying MiMo video understanding via signed temp URL (%s)", mime_for_video)
             try:
                 from app.analysis.video_analyzer import VideoAnalyzer
@@ -251,6 +285,11 @@ async def diagnose_note(
                 )
             except Exception as e:
                 logger.warning("Video understanding failed, fallback to title/content inference: %s", e)
+        elif mime_for_video in MIMO_VIDEO_MIME:
+            logger.info(
+                "Skip MiMo video_url (API base URL is localhost-only); "
+                "set MIMO_VIDEO_PUBLIC_BASE_URL or X-Forwarded-* for full video understanding",
+            )
         else:
             logger.info("Video mime %s outside MiMo supported types; skip video understanding", mime_for_video)
 
@@ -343,12 +382,13 @@ async def diagnose_stream(
 
     video_analysis: Optional[dict] = None
     if image_bytes is None and video_bytes is not None:
-        extracted = _extract_first_video_frame(video_bytes)
+        mime_for_video = (video_file.content_type if video_file else None) or "video/mp4"
+        ext = MIME_TO_EXT.get(mime_for_video, ".mp4")
+        extracted = _extract_first_video_frame(video_bytes, ext)
         if extracted is not None:
             image_bytes = extracted
 
-        mime_for_video = (video_file.content_type if video_file else None) or "video/mp4"
-        if mime_for_video in MIMO_VIDEO_MIME:
+        if mime_for_video in MIMO_VIDEO_MIME and not public_base_url_is_localhost_only(request):
             try:
                 from app.analysis.video_analyzer import VideoAnalyzer
                 video_url = _store_temp_video_and_build_url(request, video_bytes, mime_for_video)

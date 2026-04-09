@@ -12,16 +12,24 @@ import re
 from io import BytesIO
 from typing import Optional
 
-from fastapi import APIRouter, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
 from PIL import Image
 
-from app.agents.base_agent import _get_client, _is_mimo_openai_compat
+from app.agents.base_agent import _get_client, _is_mimo_openai_compat, _parse_json_from_llm_text
+from app.analysis.mimo_video import build_mimo_video_url_content_part
+from app.api.diagnose import (
+    MAX_VIDEO_SIZE,
+    MIME_TO_EXT,
+    MIMO_VIDEO_MIME,
+    _extract_first_video_frame,
+    _store_temp_video_and_build_url,
+    public_base_url_is_localhost_only,
+)
 
 router = APIRouter()
 logger = logging.getLogger("noterx.screenshot")
 
 MAX_IMAGE_SIZE = 10 * 1024 * 1024
-MAX_VIDEO_SIZE = 100 * 1024 * 1024
 ALLOWED_IMAGE_MIME = {"image/jpeg", "image/png", "image/webp", "image/gif"}
 ALLOWED_VIDEO_MIME = {"video/mp4", "video/webm", "video/quicktime"}
 
@@ -52,6 +60,20 @@ _QUICK_PROMPT = """你是一个小红书内容理解助手。请快速、准确�
 
 仅输出 JSON：
 {"slot_type": "cover|content|profile|comments|other", "extra_slots": [], "category": "", "title": "", "content_text": "", "summary": "", "confidence": 0.0}"""
+
+_VIDEO_QUICK_PROMPT = """你是小红书内容理解助手。用户上传了一段**视频**（可能是笔记录屏、Vlog、商品展示、成品笔记预览等）。
+
+请根据画面、字幕与口播可见信息（如有）推断笔记形态，输出与截图快识**相同字段**的 JSON：
+1) slot_type：多为 content；若几乎只有封面大字则 cover；整屏为个人主页则 profile；几乎只有评论列表则 comments；否则 other。
+2) extra_slots：数组，规则同截图快识（分屏含评论区时含 "comments"，否则 []）。
+3) category：垂类（穿搭、美食、数码、旅行、美妆、健身、生活、家居等）。
+4) title：画面或字幕中清晰的笔记标题务必写入；若无则根据主题拟一条不超过 40 字的标题钩子，勿编造具体数字/价格。
+5) content_text：可见正文、话题标签、或按时间线列出的视频要点；没有则写 2～4 句主题描述。
+6) summary：1～2 句整体概括。
+7) confidence：0～1。
+
+仅输出合法 JSON，不要用 markdown 代码块：
+{"slot_type": "", "extra_slots": [], "category": "", "title": "", "content_text": "", "summary": "", "confidence": 0.0}"""
 
 _DEEP_PROMPT_COVER = """分析这张封面截图的视觉吸引力，输出 JSON：
 {"visual_score": 0-100, "color_scheme": "配色描述", "composition": "构图评价", "text_overlay": "文字覆盖率评价", "suggestions": ["建议1", "建议2"]}"""
@@ -214,6 +236,95 @@ async def _vision_call(
         return {"raw_text": raw, "error": "JSON解析失败"}
 
 
+def _normalize_quick_recognition_fields(result: dict) -> None:
+    """统一快识字段：slot_type、extra_slots 及 cover/content 下的 title 规则。"""
+    slot_type = _normalize_slot_type(result.get("slot_type", ""))
+    result["slot_type"] = slot_type
+    result["extra_slots"] = _normalize_extra_slots(result.get("extra_slots"))
+    if slot_type == "cover":
+        result["content_text"] = ""
+    elif slot_type != "content":
+        result["title"] = ""
+        result["content_text"] = ""
+
+
+def _quick_payload_is_empty(result: dict) -> bool:
+    return (
+        not str(result.get("title", "")).strip()
+        and not str(result.get("content_text", "")).strip()
+        and not str(result.get("summary", "")).strip()
+    )
+
+
+async def _video_url_quick_call(client, video_url: str) -> dict:
+    """
+    通过 MiMo 视频理解（video_url content part）请求模型，返回与快识相同结构的 JSON。
+    消息体对齐：https://platform.xiaomimimo.com/#/docs/usage-guide/multimodal-understanding/video-understanding
+    """
+    resolved_model = os.getenv("LLM_MODEL_OMNI", "mimo-v2-omni")
+    out_cap = int(os.getenv("QUICK_RECOGNIZE_VIDEO_MAX_COMPLETION_TOKENS", "2000"))
+    video_part = build_mimo_video_url_content_part(video_url)
+    kwargs = {
+        "model": resolved_model,
+        "messages": [
+            {
+                "role": "system",
+                "content": "You return ONLY valid JSON for Xiaohongshu note understanding; no markdown fences.",
+            },
+            {
+                "role": "user",
+                "content": [
+                    video_part,
+                    {"type": "text", "text": _VIDEO_QUICK_PROMPT},
+                ],
+            },
+        ],
+        "temperature": float(os.getenv("LLM_TEMPERATURE", "0.3")),
+    }
+    if _is_mimo_openai_compat():
+        kwargs["max_completion_tokens"] = out_cap
+    else:
+        kwargs["max_tokens"] = out_cap
+
+    resp = await client.chat.completions.create(**kwargs)
+    raw = (resp.choices[0].message.content or "").strip()
+    if raw.startswith("```"):
+        raw = raw.split("\n", 1)[-1].rsplit("```", 1)[0].strip()
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError:
+        parsed = _parse_json_from_llm_text(raw)
+        if isinstance(parsed, dict):
+            return parsed
+        return {"raw_text": raw, "error": "JSON解析失败"}
+
+
+async def _ocr_supplement_quick_result(client, image_bytes: bytes, result: dict, ocr_cap: int) -> None:
+    """title/content 缺省时用 OCR 补全（与图片快识一致）。"""
+    content_text = str(result.get("content_text", "")).strip()
+    title_text = str(result.get("title", "")).strip()
+    if content_text and title_text:
+        return
+    try:
+        from app.analysis.ocr_processor import OCRProcessor
+
+        ocr = OCRProcessor()
+        ocr_result = await ocr.extract_text(image_bytes, client, max_tokens_override=ocr_cap)
+        ocr_title = str(ocr_result.get("title", "")).strip()
+        ocr_content = str(ocr_result.get("content", "")).strip()
+        ocr_tags = ocr_result.get("tags", [])
+        if not ocr_content and isinstance(ocr_tags, list):
+            ocr_content = _normalize_tags(ocr_tags)
+        if not title_text and ocr_title:
+            result["title"] = ocr_title
+        if not content_text and ocr_content:
+            result["content_text"] = ocr_content
+        if not str(result.get("summary", "")).strip() and ocr_content:
+            result["summary"] = ocr_content[:80]
+    except Exception as ocr_error:
+        logger.warning("quick-recognize OCR fallback failed: %s", ocr_error)
+
+
 @router.post("/screenshot/quick-recognize")
 async def quick_recognize(
     file: UploadFile = File(...),
@@ -251,14 +362,8 @@ async def quick_recognize(
             max_out_tokens=quick_max_out,
             image_mime=image_mime,
         )
-        slot_type = _normalize_slot_type(result.get("slot_type", ""))
-        result["slot_type"] = slot_type
-        result["extra_slots"] = _normalize_extra_slots(result.get("extra_slots"))
-        if slot_type == "cover":
-            result["content_text"] = ""
-        elif slot_type != "content":
-            result["title"] = ""
-            result["content_text"] = ""
+        _normalize_quick_recognition_fields(result)
+        slot_type = str(result.get("slot_type", ""))
         logger.info(
             "快识结果: slot_type=%s extra_slots=%s title=%s category=%s keys=%s",
             slot_type,
@@ -268,29 +373,7 @@ async def quick_recognize(
             list(result.keys()),
         )
 
-        # 不管 slot_type，只要 title 或 content_text 为空就尝试 OCR 补充
-        content_text = str(result.get("content_text", "")).strip()
-        title_text = str(result.get("title", "")).strip()
-        if not content_text or not title_text:
-            try:
-                from app.analysis.ocr_processor import OCRProcessor
-                ocr = OCRProcessor()
-                ocr_result = await ocr.extract_text(
-                    image_bytes, client, max_tokens_override=ocr_cap
-                )
-                ocr_title = str(ocr_result.get("title", "")).strip()
-                ocr_content = str(ocr_result.get("content", "")).strip()
-                ocr_tags = ocr_result.get("tags", [])
-                if not ocr_content and isinstance(ocr_tags, list):
-                    ocr_content = _normalize_tags(ocr_tags)
-                if not title_text and ocr_title:
-                    result["title"] = ocr_title
-                if not content_text and ocr_content:
-                    result["content_text"] = ocr_content
-                if not str(result.get("summary", "")).strip() and ocr_content:
-                    result["summary"] = ocr_content[:80]
-            except Exception as ocr_error:
-                logger.warning("quick-recognize OCR fallback failed: %s", ocr_error)
+        await _ocr_supplement_quick_result(client, image_bytes_raw, result, ocr_cap)
         return {"success": True, **result}
     except Exception as e:
         logger.error("快速识别失败: %s", e)
@@ -305,6 +388,95 @@ async def quick_recognize(
             "content_text": "",
             "confidence": 0.0,
         }
+
+
+@router.post("/screenshot/quick-recognize-video")
+async def quick_recognize_video(request: Request, file: UploadFile = File(...)):
+    """
+    上传视频后进行 AI 快识，返回字段与 /screenshot/quick-recognize 一致。
+    优先使用 MiMo 支持的 video_url 全片理解；失败或非支持格式时抽代表帧走视觉快识。
+    @param file - mp4 / webm / quicktime
+    """
+    if file.content_type and file.content_type not in ALLOWED_VIDEO_MIME:
+        raise HTTPException(400, f"不支持的视频格式: {file.content_type}")
+
+    video_bytes = await file.read()
+    if len(video_bytes) > MAX_VIDEO_SIZE:
+        raise HTTPException(400, f"视频不能超过 {MAX_VIDEO_SIZE // (1024 * 1024)}MB")
+
+    mime = (file.content_type or "video/mp4").strip()
+    container_ext = MIME_TO_EXT.get(mime, ".mp4")
+    client = _get_client()
+    quick_max_out = int(os.getenv("QUICK_RECOGNIZE_MAX_COMPLETION_TOKENS", "1200"))
+    ocr_cap = int(os.getenv("QUICK_RECOGNIZE_OCR_MAX_TOKENS", "512"))
+
+    result: dict = {}
+    try_mimo_video_url = mime in MIMO_VIDEO_MIME and not public_base_url_is_localhost_only(request)
+    if not try_mimo_video_url and mime in MIMO_VIDEO_MIME:
+        logger.info(
+            "视频快识：当前推导的 API 基址为内网/本机，跳过 MiMo video_url；"
+            "上线请设置 MIMO_VIDEO_PUBLIC_BASE_URL，或由反向代理传入 X-Forwarded-Proto / X-Forwarded-Host",
+        )
+    if try_mimo_video_url:
+        try:
+            video_url = _store_temp_video_and_build_url(request, video_bytes, mime)
+            raw = await _video_url_quick_call(client, video_url)
+            if isinstance(raw, dict):
+                result = raw
+            logger.info("视频快识 video_url 完成 keys=%s", list(result.keys()))
+        except Exception as e:
+            logger.warning("视频快识 video_url 失败，将尝试抽帧: %s", e)
+            result = {}
+
+    if not isinstance(result, dict):
+        result = {}
+
+    _normalize_quick_recognition_fields(result)
+
+    frame_jpeg: Optional[bytes] = None
+    if _quick_payload_is_empty(result):
+        frame_jpeg = _extract_first_video_frame(video_bytes, container_ext)
+        if frame_jpeg:
+            try:
+                img_bytes, img_mime = _prepare_quick_recognize_image(frame_jpeg)
+                fp = _QUICK_PROMPT + "\n提示：这是一段视频中的**代表帧**（非完整视频），请根据画面推断笔记标题与正文要点。"
+                fr = await _vision_call(
+                    client, fp, img_bytes, max_out_tokens=quick_max_out, image_mime=img_mime
+                )
+                if isinstance(fr, dict):
+                    result = fr
+                    _normalize_quick_recognition_fields(result)
+                    logger.info("视频快识抽帧视觉完成 slot_type=%s", result.get("slot_type"))
+            except Exception as e:
+                logger.warning("视频快识抽帧视觉失败: %s", e)
+
+    if frame_jpeg is None and (
+        not str(result.get("title", "")).strip() or not str(result.get("content_text", "")).strip()
+    ):
+        frame_jpeg = _extract_first_video_frame(video_bytes, container_ext)
+    if frame_jpeg:
+        await _ocr_supplement_quick_result(client, frame_jpeg, result, ocr_cap)
+
+    if _quick_payload_is_empty(result):
+        return {
+            "success": False,
+            "error": "无法从视频中识别有效文字或主题，请换片段或手动填写",
+            "slot_type": "other",
+            "extra_slots": [],
+            "category": "",
+            "summary": "",
+            "title": "",
+            "content_text": "",
+            "confidence": 0.0,
+        }
+
+    logger.info(
+        "视频快识最终结果: slot_type=%s title=%s category=%s",
+        result.get("slot_type"),
+        str(result.get("title", ""))[:50],
+        result.get("category", ""),
+    )
+    return {"success": True, **result}
 
 
 @router.post("/screenshot/deep-analyze")

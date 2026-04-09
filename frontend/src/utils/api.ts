@@ -308,6 +308,21 @@ export async function quickRecognize(
 }
 
 /**
+ * 上传视频进行 AI 快识（全片或抽帧），返回结构与 quickRecognize 一致
+ * @param file - 视频文件（mp4 / webm / quicktime）
+ */
+export async function quickRecognizeVideo(file: File): Promise<QuickRecognizeResult> {
+  const fd = new FormData();
+  fd.append("file", file);
+  const { data } = await api.post<QuickRecognizeResult>(
+    "/screenshot/quick-recognize-video",
+    fd,
+    { headers: { "Content-Type": "multipart/form-data" }, timeout: 180000 }
+  );
+  return data;
+}
+
+/**
  * 提交完整图包进行深度分析
  * @param params - 包含 scenario 和各维度截图
  */
