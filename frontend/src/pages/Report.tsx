@@ -16,7 +16,7 @@ import StarIcon from "@mui/icons-material/Star";
 import CircularProgress from "@mui/material/CircularProgress";
 import {
   migrateLegacyLocalStorage,
-  createPendingId,
+  createLocalDiagnosisId,
   putLocalDiagnosis,
 } from "../utils/localMemory";
 import ScoreCard from "../components/ScoreCard";
@@ -54,9 +54,9 @@ export default function Report() {
     const { report, params } = state;
     void (async () => {
       await migrateLegacyLocalStorage();
-      const pendingId = createPendingId();
+      const id = createLocalDiagnosisId();
       await putLocalDiagnosis({
-        id: pendingId,
+        id,
         serverId: null,
         title: params.title,
         category: params.category,
@@ -66,7 +66,7 @@ export default function Report() {
         report,
         params: params as Record<string, unknown>,
       });
-      // 不再上传到服务端（修复 #58 历史记录共享问题），仅保留本地
+      // 不再上传到服务端（修复 #58），仅保留本地
     })();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 

@@ -1,6 +1,9 @@
 """
 Video analysis module.
 Uses MiMo omni model video understanding API to extract visual cues from a video.
+
+请求体对齐小米文档「视频理解」：
+https://platform.xiaomimimo.com/#/docs/usage-guide/multimodal-understanding/video-understanding
 """
 from __future__ import annotations
 
@@ -10,6 +13,7 @@ import os
 from typing import Optional
 
 from app.agents.base_agent import _get_client, _is_mimo_openai_compat, _parse_json_from_llm_text
+from app.analysis.mimo_video import build_mimo_video_url_content_part
 
 logger = logging.getLogger("noterx.video_analyzer")
 
@@ -22,11 +26,13 @@ class VideoAnalyzer:
         video_data_url: str,
         *,
         prompt_hint: str = "",
-        fps: float = 2.0,
-        media_resolution: str = "default",
+        fps: Optional[float] = None,
+        media_resolution: Optional[str] = None,
     ) -> dict:
         """
         Analyze one video and return structured summary for downstream diagnosis.
+        @param fps - 若提供则临时覆盖环境变量 MIMO_VIDEO_FPS（写入 video_url.fps）
+        @param media_resolution - 若提供则临时覆盖 MIMO_VIDEO_MEDIA_RESOLUTION
         """
         client = _get_client()
         model = os.getenv("LLM_MODEL_OMNI", "mimo-v2-omni")
@@ -47,6 +53,12 @@ class VideoAnalyzer:
         if prompt_hint.strip():
             user_prompt += f" Additional context: {prompt_hint.strip()}"
 
+        video_part = build_mimo_video_url_content_part(video_data_url)
+        if fps is not None:
+            video_part["video_url"]["fps"] = max(0.1, min(float(fps), 10.0))
+        if media_resolution is not None and media_resolution in ("default", "max"):
+            video_part["media_resolution"] = media_resolution
+
         kwargs = {
             "model": model,
             "messages": [
@@ -54,12 +66,7 @@ class VideoAnalyzer:
                 {
                     "role": "user",
                     "content": [
-                        {
-                            "type": "video_url",
-                            "video_url": {"url": video_data_url},
-                            "fps": max(0.1, min(float(fps), 10.0)),
-                            "media_resolution": media_resolution if media_resolution in ("default", "max") else "default",
-                        },
+                        video_part,
                         {"type": "text", "text": user_prompt},
                     ],
                 },

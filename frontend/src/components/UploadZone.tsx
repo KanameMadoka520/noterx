@@ -27,7 +27,9 @@ const IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"];
 const VIDEO_TYPES = ["video/mp4", "video/quicktime", "video/webm"];
 const ALL_ACCEPT = [...IMAGE_TYPES, ...VIDEO_TYPES].join(",");
 const MAX_IMAGE = 10 * 1024 * 1024;
-const MAX_VIDEO = 200 * 1024 * 1024;
+/** 与后端 MAX_VIDEO_UPLOAD_MB 默认 300 对齐；更大需在 backend/.env 调高并同步此处 */
+const VIDEO_MAX_MB = 300;
+const MAX_VIDEO = VIDEO_MAX_MB * 1024 * 1024;
 
 /**
  * Multi-file upload zone with grid preview.
@@ -86,7 +88,7 @@ export default function UploadZone({
           continue;
         }
         if (isVideo && f.size > MAX_VIDEO) {
-          setError(`视频过大（${formatSize(f.size)}），最大 200MB`);
+          setError(`视频过大（${formatSize(f.size)}），最大 ${VIDEO_MAX_MB}MB`);
           continue;
         }
         if (isVideo && files.some((ex) => VIDEO_TYPES.includes(ex.type))) {

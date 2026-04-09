@@ -295,6 +295,8 @@ export type SlotType = "cover" | "content" | "profile" | "comments";
 export interface QuickRecognizeResult {
   success: boolean;
   slot_type: string;
+  /** 同屏多区域时附加类型，如分屏含评论区时为 ["comments"] */
+  extra_slots?: string[];
   category: string;
   title?: string;
   content_text?: string;
@@ -333,6 +335,21 @@ export async function quickRecognize(
     "/screenshot/quick-recognize",
     fd,
     { headers: { "Content-Type": "multipart/form-data" } }
+  );
+  return data;
+}
+
+/**
+ * 上传视频进行 AI 快识（全片或抽帧），返回结构与 quickRecognize 一致
+ * @param file - 视频文件（mp4 / webm / quicktime）
+ */
+export async function quickRecognizeVideo(file: File): Promise<QuickRecognizeResult> {
+  const fd = new FormData();
+  fd.append("file", file);
+  const { data } = await api.post<QuickRecognizeResult>(
+    "/screenshot/quick-recognize-video",
+    fd,
+    { headers: { "Content-Type": "multipart/form-data" }, timeout: 180000 }
   );
   return data;
 }

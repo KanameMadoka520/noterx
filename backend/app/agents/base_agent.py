@@ -98,15 +98,70 @@ def _get_client():
     )
 
 
+def _normalize_llm_output_for_json(raw: str) -> str:
+    """
+    去掉推理模型常见「思考」前缀，避免干扰 JSON 定位。
+    部分网关会在最终 JSON 前输出 redacted_reasoning / think 等思考块。
+    """
+    t = str(raw).strip()
+    # 取最后一个闭合标记之后的正文（思考在前、JSON 在后）
+    split_markers = (
+        "</redacted_reasoning>",
+        "</redacted_thinking>",
+        "</think>",
+    )
+    for pat in split_markers:
+        if pat.lower() in t.lower():
+            parts = re.split(re.escape(pat), t, flags=re.IGNORECASE)
+            t = parts[-1].strip()
+    t = re.sub(r"<redacted_reasoning>[\s\S]*?</redacted_reasoning>", "", t, flags=re.IGNORECASE)
+    t = re.sub(r"<redacted_thinking>[\s\S]*?</redacted_thinking>", "", t, flags=re.IGNORECASE)
+    return t.strip()
+
+
 def _parse_json_from_llm_text(raw: Optional[str]) -> dict:
-    """从模型输出中提取 JSON（支持 ```json 代码块）。"""
-    if not raw or not raw.strip():
+    """
+    从模型输出中解析 JSON 对象（诊断 Agent 均要求顶层为 object）。
+    兼容：思考标签、前后废话、```json 代码块、首个 { 非答案（多候选 raw_decode）等。
+    """
+    if not raw or not str(raw).strip():
         raise json.JSONDecodeError("empty", "", 0)
-    clean = raw.strip()
-    if clean.startswith("```"):
-        clean = re.sub(r"^```(?:json)?\s*", "", clean, flags=re.IGNORECASE)
-        clean = re.sub(r"\s*```\s*$", "", clean)
-    return json.loads(clean)
+    text = _normalize_llm_output_for_json(str(raw).strip())
+
+    # 1) 提取 ``` / ```json 代码块（非贪婪到第一个闭合 fence）
+    fence = re.search(r"```(?:json)?\s*([\s\S]*?)\s*```", text, re.IGNORECASE)
+    if fence:
+        text = fence.group(1).strip()
+    elif text.startswith("```"):
+        text = re.sub(r"^```(?:json)?\s*", "", text, flags=re.IGNORECASE)
+        text = re.sub(r"\s*```\s*$", "", text)
+
+    # 2) 整段即 JSON
+    try:
+        obj = json.loads(text)
+        if isinstance(obj, dict) and len(obj) > 0:
+            return obj
+    except json.JSONDecodeError:
+        pass
+
+    # 3) 从每个「可能的」{ 起 raw_decode（思考里可能出现示例 JSON，首个 { 常非最终答案）
+    decoder = json.JSONDecoder()
+    brace_starts = [i for i, c in enumerate(text) if c == "{"]
+    last_err: Optional[Exception] = None
+    for start in brace_starts[:16]:
+        try:
+            obj, _end = decoder.raw_decode(text, start)
+        except json.JSONDecodeError as e:
+            last_err = e
+            continue
+        if isinstance(obj, dict) and len(obj) > 0:
+            return obj
+    if last_err is not None:
+        logger.warning(
+            "JSON raw_decode 均失败（可调高 LLM_MAX_COMPLETION_TOKENS / JUDGE_MAX_COMPLETION_TOKENS）: %s",
+            last_err,
+        )
+    raise json.JSONDecodeError("no valid json object in output", text, 0)
 
 
 def _should_retry_openai_without_json_format(exc: BaseException) -> bool:
@@ -196,9 +251,12 @@ class BaseAgent:
         try:
             raw = response.choices[0].message.content
             try:
-                result = json.loads(raw)
+                result = json.loads(raw or "")
             except json.JSONDecodeError:
                 result = _parse_json_from_llm_text(raw)
+            if not isinstance(result, dict):
+                logger.warning("LLM 返回顶层非 object: %s", str(raw)[:400])
+                return self._error_response("LLM 返回了非 JSON 对象（应为 {...}）")
             usage = response.usage
             if usage:
                 result["_meta"] = {
@@ -224,26 +282,36 @@ class BaseAgent:
     ) -> dict:
         """调用多模态模型分析图像"""
         sys_prompt = system_prompt or self.system_prompt
+        mimo = _is_mimo_openai_compat()
+        max_out = max_tokens or int(os.getenv("LLM_MAX_COMPLETION_TOKENS", "2048"))
+        kwargs: dict = {
+            "model": MODEL_OMNI,
+            "messages": [
+                {"role": "system", "content": sys_prompt},
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": text_message},
+                        {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{image_b64}"}},
+                    ],
+                },
+            ],
+            "temperature": float(os.getenv("LLM_TEMPERATURE", "0.7")),
+        }
+        if mimo:
+            kwargs["max_completion_tokens"] = max_out
+        else:
+            kwargs["max_tokens"] = max_out
+        raw: Optional[str] = None
         try:
-            response = await self.client.chat.completions.create(
-                model=MODEL_OMNI,
-                messages=[
-                    {"role": "system", "content": sys_prompt},
-                    {
-                        "role": "user",
-                        "content": [
-                            {"type": "text", "text": text_message},
-                            {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{image_b64}"}},
-                        ],
-                    },
-                ],
-                max_tokens=max_tokens,
-            )
+            response = await self.client.chat.completions.create(**kwargs)
             raw = response.choices[0].message.content
-            clean = raw.strip()
-            if clean.startswith("```"):
-                clean = clean.split("\n", 1)[1].rsplit("```", 1)[0]
-            result = json.loads(clean)
+            try:
+                result = json.loads((raw or "").strip())
+            except json.JSONDecodeError:
+                result = _parse_json_from_llm_text(raw)
+            if not isinstance(result, dict):
+                return self._error_response("多模态模型返回了非 JSON 对象")
             usage = response.usage
             if usage:
                 result["_meta"] = {
@@ -254,6 +322,7 @@ class BaseAgent:
                 }
             return result
         except json.JSONDecodeError:
+            logger.warning("多模态原始输出（非 JSON）: %s", (raw or "")[:800])
             return self._error_response("多模态模型返回了非 JSON 格式的内容")
         except Exception as e:
             logger.warning("多模态调用失败: %s", e)

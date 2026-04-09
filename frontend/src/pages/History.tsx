@@ -43,8 +43,19 @@ const GRADE_COLOR: Record<string, string> = {
   D: "#dc2626",
 };
 
+/** 按创建时间倒序 */
+function sortListItems(a: HistoryListItem, b: HistoryListItem): number {
+  const ta = new Date(
+    a.created_at.includes("T") ? a.created_at : a.created_at.replace(" ", "T"),
+  ).getTime();
+  const tb = new Date(
+    b.created_at.includes("T") ? b.created_at : b.created_at.replace(" ", "T"),
+  ).getTime();
+  return tb - ta;
+}
+
 /**
- * 历史记录页
+ * 历史记录页（仅 IndexedDB，不同步服务器）
  */
 export default function History() {
   const navigate = useNavigate();
@@ -55,20 +66,13 @@ export default function History() {
 
   const fetchList = async () => {
     setLoading(true);
-    await migrateLegacyLocalStorage();
     try {
-      // 纯本地读取，不请求服务端（修复 #58 历史记录共享问题）
+      await migrateLegacyLocalStorage();
       const locals = await listLocalDiagnoses();
-      const sorted = locals
-        .map(localRecordToListItem)
-        .sort((a, b) => {
-          const ta = new Date(a.created_at.includes("T") ? a.created_at : a.created_at.replace(" ", "T")).getTime();
-          const tb = new Date(b.created_at.includes("T") ? b.created_at : b.created_at.replace(" ", "T")).getTime();
-          return tb - ta;
-        });
-      setItems(sorted);
+      setItems(locals.map(localRecordToListItem).sort(sortListItems));
     } catch (e) {
       console.error("读取本地历史失败", e);
+      setItems([]);
     } finally {
       setLoading(false);
     }
@@ -78,11 +82,11 @@ export default function History() {
     fetchList();
   }, []);
 
-  /** 点击卡片：加载完整报告后跳转 Report 页 */
+  /** 点击卡片：从 IndexedDB 读完整报告后跳转 Report 页 */
   const handleOpen = async (item: HistoryListItem) => {
     setNavigating(item.id);
     try {
-      // 全部从本地 IndexedDB 读取
+
       const rec = await getLocalDiagnosis(item.id);
       if (!rec) throw new Error("本地记录不存在");
       const p = rec.params;
@@ -98,12 +102,12 @@ export default function History() {
         },
       });
     } catch (e) {
-      console.error("获取报告详情失败", e);
+      console.error("打开本地记录失败", e);
       setNavigating(null);
     }
   };
 
-  /** 确认删除 */
+  /** 确认删除（仅本地 IndexedDB） */
   const handleDelete = async () => {
     if (!deleteTarget) return;
     try {
@@ -158,9 +162,14 @@ export default function History() {
           >
             首页
           </Button>
-          <Typography sx={{ fontWeight: 700, color: "#262626", fontSize: 16 }}>
-            诊断历史
-          </Typography>
+          <Box sx={{ textAlign: "center" }}>
+            <Typography sx={{ fontWeight: 700, color: "#262626", fontSize: 16 }}>
+              诊断历史
+            </Typography>
+            <Typography sx={{ fontSize: 11, color: "#999", mt: 0.25 }}>
+              仅保存在本机浏览器
+            </Typography>
+          </Box>
           <Box sx={{ width: 64 }} />
         </Box>
       </Box>

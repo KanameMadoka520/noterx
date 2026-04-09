@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import json
+import os
 
 from app.agents.base_agent import BaseAgent
 from app.agents.prompts.judge_agent import SYSTEM_PROMPT
@@ -62,4 +63,8 @@ class JudgeAgent(BaseAgent):
     async def diagnose(self, **kwargs) -> dict:
         """执行综合裁判（使用更高 token 限额）"""
         msg = self.build_user_message(**kwargs)
-        return await self.call_llm(msg, max_tokens=3000)
+        # 最终报告 JSON 较长，避免截断导致无法解析
+        return await self.call_llm(
+            msg,
+            max_tokens=int(os.getenv("JUDGE_MAX_COMPLETION_TOKENS", "6144")),
+        )

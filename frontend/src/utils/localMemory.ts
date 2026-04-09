@@ -1,8 +1,9 @@
 /**
- * 浏览器端本地记忆（参考 OpenClaw：数据落在本机、可长期保留IndexedDB + 可选与后端同步）。
+ * 浏览器端本地诊断历史（IndexedDB）。
+ * 数据仅保存在本机，不上传服务器；清除站点数据或换浏览器后需自行备份。
  *
- * - 每条诊断完整存一份，不受条数上限。
- * - 同步前使用 `pending-*` 作为 id；服务端返回后合并为服务端 id。
+ * - 每条诊断完整存一份。
+ * - 主键为 `local-*`（及迁移遗留的 `legacy-*`）。
  */
 import type { DiagnoseResult } from "./api";
 
@@ -11,9 +12,9 @@ const DB_VERSION = 1;
 const STORE = "diagnoses";
 
 export interface LocalDiagnosisRecord {
-  /** 主键：服务端 id 或 pending-${uuid} */
+  /** 主键：local-${uuid} 或迁移遗留 id */
   id: string;
-  /** 同步成功后的服务端 id（与 id 相同）；未同步为 null */
+  /** 保留字段；纯本地模式下始终为 null */
   serverId: string | null;
   title: string;
   category: string;
@@ -125,23 +126,16 @@ export async function deleteLocalDiagnosis(id: string): Promise<void> {
   });
 }
 
-/**
- * 将 pending 记录替换为服务端 id（删除旧键、写入新键）。
- */
-export async function replacePendingWithServerId(pendingId: string, serverId: string): Promise<void> {
-  const prev = await getLocalDiagnosis(pendingId);
-  if (!prev) return;
-  await deleteLocalDiagnosis(pendingId);
-  await putLocalDiagnosis({
-    ...prev,
-    id: serverId,
-    serverId,
-  });
+/** @returns 新的本地历史记录 id */
+export function createLocalDiagnosisId(): string {
+  return `local-${crypto.randomUUID()}`;
 }
 
-/** @returns 新的 pending id */
+/**
+ * @deprecated 请使用 {@link createLocalDiagnosisId}
+ */
 export function createPendingId(): string {
-  return `pending-${crypto.randomUUID()}`;
+  return createLocalDiagnosisId();
 }
 
 export function localRecordToListItem(r: LocalDiagnosisRecord): import("./api").HistoryListItem {
