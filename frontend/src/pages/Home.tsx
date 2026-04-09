@@ -35,7 +35,7 @@ const CAT_MAP: Record<string, string> = {
 };
 
 /** 快识并行路数：略限流可减少总排队，利于接近「单张 <5s」的体感 */
-const QUICK_RECOGNIZE_CONCURRENCY = 2;
+const QUICK_RECOGNIZE_CONCURRENCY = 3;
 
 /** 首页：桌面端双栏布局，移动端单页布局 */
 export default function Home() {

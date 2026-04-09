@@ -4,6 +4,7 @@
 """
 from __future__ import annotations
 
+import asyncio
 import base64
 import json
 import logging
@@ -253,7 +254,14 @@ async def _vision_call(
     else:
         kwargs["max_tokens"] = out_cap
 
-    resp = await client.chat.completions.create(**kwargs)
+    # 60s 超时防止 MiMo API 挂住
+    try:
+        resp = await asyncio.wait_for(
+            client.chat.completions.create(**kwargs),
+            timeout=60,
+        )
+    except asyncio.TimeoutError:
+        return {"error": "视觉识别超时(60s)", "slot_type": "other"}
     raw = resp.choices[0].message.content or ""
     clean = raw.strip()
     if clean.startswith("```"):
