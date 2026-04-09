@@ -74,16 +74,17 @@ function SmoothProgressBar({ done, total }: { done: number; total: number }) {
   }, [realPct]);
 
   return (
-    <Box sx={{ height: 3, bgcolor: "#f0f0f0", borderRadius: 2, overflow: "hidden" }}>
+    <Box sx={{ height: 4, bgcolor: "#f0f0f0", borderRadius: 2, overflow: "hidden" }}>
       <Box sx={{
-        height: "100%", borderRadius: 2, bgcolor: "#ff2442",
+        height: "100%", borderRadius: 2,
+        background: "linear-gradient(90deg, #ff2442, #ff6b81)",
         width: `${Math.min(smooth, 100)}%`,
-        transition: "width 0.3s ease",
+        transition: "width 0.4s cubic-bezier(0.4,0,0.2,1)",
         position: "relative",
         "&::after": {
           content: '""', position: "absolute", inset: 0,
-          background: "linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent)",
-          animation: "shimmer 2s infinite",
+          background: "linear-gradient(90deg, transparent, rgba(255,255,255,0.4), transparent)",
+          animation: "shimmer 1.5s infinite",
         },
       }} />
     </Box>
@@ -501,7 +502,7 @@ export default function Home() {
       minHeight: { xs: "100dvh" },
       display: "flex",
       flexDirection: "column",
-      bgcolor: "#fafafa",
+      bgcolor: "#faf9f7",
       overflow: { xs: "auto", md: "hidden" },
     }}>
 

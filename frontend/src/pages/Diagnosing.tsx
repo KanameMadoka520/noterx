@@ -301,7 +301,7 @@ export default function Diagnosing() {
   const currentStep = STEPS[Math.min(step, STEPS.length - 1)];
 
   return (
-    <Box sx={{ position: "fixed", inset: 0, bgcolor: "#fff", display: "flex", flexDirection: "column" }}>
+    <Box sx={{ position: "fixed", inset: 0, bgcolor: "#faf9f7", display: "flex", flexDirection: "column" }}>
 
       {/* ═══ Top bar ═══ */}
       <Box sx={{

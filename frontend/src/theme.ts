@@ -111,8 +111,8 @@ const themeOptions: ThemeOptions = {
     MuiCssBaseline: {
       styleOverrides: {
         body: {
-          backgroundColor: "#faf8f9",
-          backgroundImage: "radial-gradient(ellipse 120% 80% at 50% -20%, rgba(255, 36, 66, 0.06), transparent 55%)",
+          backgroundColor: "#faf9f7",
+          backgroundImage: "radial-gradient(ellipse 100% 60% at 50% -10%, rgba(255, 200, 180, 0.08), transparent 50%), radial-gradient(ellipse 80% 40% at 80% 100%, rgba(255, 36, 66, 0.03), transparent 40%)",
           backgroundAttachment: "fixed",
         },
       },

@@ -72,7 +72,7 @@ export default function Report() {
 
   if (!state) {
     return (
-      <Box sx={{ minHeight: "100vh", bgcolor: "#fafafa", display: "flex", alignItems: "center", justifyContent: "center" }}>
+      <Box sx={{ minHeight: "100vh", bgcolor: "#faf9f7", display: "flex", alignItems: "center", justifyContent: "center" }}>
         <Box sx={{ textAlign: "center" }}>
           <Typography sx={{ color: "#999", fontSize: 14, mb: 2 }}>暂无诊断数据</Typography>
           <Button onClick={() => navigate("/app")} sx={{ color: "#ff2442", fontWeight: 600 }}>返回首页</Button>
@@ -153,7 +153,7 @@ export default function Report() {
   });
 
   return (
-    <Box sx={{ minHeight: "100vh", bgcolor: "#fafafa", pb: 6 }}>
+    <Box sx={{ minHeight: "100vh", bgcolor: "#faf9f7", pb: 6 }}>
       {/* Top bar */}
       <Box sx={{ position: "sticky", top: 0, zIndex: 50, bgcolor: "#fff", borderBottom: "1px solid #f0f0f0" }}>
         <Box sx={{ maxWidth: 960, mx: "auto", px: { xs: 2, md: 3 }, py: 1.25, display: "flex", alignItems: "center" }}>

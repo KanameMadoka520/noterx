@@ -294,42 +294,44 @@ class Orchestrator:
         t2 = time.time()
         agents_list = [content_agent, visual_agent, growth_agent, user_sim_agent]
 
-        # Run debate and judge in parallel (judge uses Round 1 opinions directly)
+        # 辩论和裁判并行，但各自完成时立即发进度事件
         judge = JudgeAgent(model=MODEL_PRO)
 
+        debate_records: list[dict] = []
+        debate_tokens = 0
+        final_report: dict = {}
+        judge_tokens = 0
+
         async def _debate_task():
-            return await self._run_debate(agent_opinions, agents_list, progress_cb=_emit_progress)
+            nonlocal debate_records, debate_tokens
+            try:
+                debate_records, debate_tokens = await self._run_debate(
+                    agent_opinions, agents_list, progress_cb=_emit_progress
+                )
+            except Exception as e:
+                logger.warning("辩论异常: %s", e)
+            await _emit_progress("debate_done", "专家辩论完成")
 
         async def _judge_task():
-            return await judge.diagnose(
-                title=title, category=category,
-                agent_opinions=agent_opinions, debate_records=None,
-            )
+            nonlocal final_report, judge_tokens
+            await _emit_progress("judge_start", "综合裁判正在评定...")
+            try:
+                result = await judge.diagnose(
+                    title=title, category=category,
+                    agent_opinions=agent_opinions, debate_records=None,
+                )
+                final_report = result
+                meta = final_report.pop("_meta", None)
+                judge_tokens = meta.get("total_tokens", 0) if meta else 0
+            except Exception as e:
+                logger.error("裁判异常: %s", e)
+                final_report = {"overall_score": 50, "grade": "C", "issues": [{"severity": "high", "description": str(e), "from_agent": "system"}], "suggestions": [], "debate_summary": "裁判失败"}
+            await _emit_progress("judge_done", "裁判评定完成")
 
-        (debate_result, judge_result) = await asyncio.gather(
-            _debate_task(), _judge_task(), return_exceptions=True,
-        )
+        await asyncio.gather(_debate_task(), _judge_task())
 
-        # Process debate
-        debate_records = []
-        debate_tokens = 0
-        if not isinstance(debate_result, Exception):
-            debate_records, debate_tokens = debate_result
-        else:
-            logger.warning("辩论异常，跳过: %s", debate_result)
-
-        # Process judge
-        if isinstance(judge_result, Exception):
-            logger.error("裁判异常: %s", judge_result)
-            final_report = {"overall_score": 50, "grade": "C", "issues": [{"severity": "high", "description": str(judge_result), "from_agent": "system"}], "suggestions": [], "debate_summary": "裁判失败"}
-        else:
-            final_report = judge_result
-
-        judge_meta = final_report.pop("_meta", None)
-        judge_tokens = judge_meta.get("total_tokens", 0) if judge_meta else 0
         logger.info("辩论+裁判并行耗时 %.1fs，debate_tokens=%d, judge_tokens=%d",
                      time.time() - t2, debate_tokens, judge_tokens)
-        await _emit_progress("judge_done", "裁判评定完成，正在整理报告")
 
         # --- Step 6: 组装响应 ---
         await _emit_progress("finalizing", "正在生成最终诊断报告...")
