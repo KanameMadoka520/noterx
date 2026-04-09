@@ -186,6 +186,7 @@ export default function Diagnosing() {
     document.title = "诊断中... - 薯医 NoteRx";
     if (!params) { navigate("/app"); return; }
     let cancelled = false;
+    const abortController = new AbortController();
 
     // Phase 1: Instant pre-score
     preScore({
@@ -233,6 +234,7 @@ export default function Diagnosing() {
               console.warn("Stream error:", event.data.message);
             }
           },
+          abortController.signal,
         );
         // SSE completed
         if (!resultRef.current) {
@@ -296,7 +298,15 @@ export default function Diagnosing() {
       }
     }, 90000);
 
-    return () => { cancelled = true; clearInterval(stepTimer); clearInterval(tipTimer); clearInterval(clockTimer); clearInterval(factTimer); clearTimeout(timeoutTimer); };
+    return () => {
+      cancelled = true;
+      abortController.abort();  // 取消SSE/fetch请求
+      clearInterval(stepTimer);
+      clearInterval(tipTimer);
+      clearInterval(clockTimer);
+      clearInterval(factTimer);
+      clearTimeout(timeoutTimer);
+    };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!params) return null;
@@ -527,7 +537,7 @@ export default function Diagnosing() {
 
             {/* ══ 辩论阶段: 辩论实况占据主要空间 ══ */}
             {step >= 8 ? (
-              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.4 }}>
+              <Box>
                 <Box sx={{
                   p: { xs: 2, md: 2.5 }, borderRadius: "14px",
                   bgcolor: "#fff", border: "1px solid #f0f0f0",
@@ -595,7 +605,7 @@ export default function Diagnosing() {
                     </motion.div>
                   )}
                 </Box>
-              </motion.div>
+              </Box>
             ) : (
               <>
                 {/* ══ 非辩论阶段: Tips + Quiz ══ */}
