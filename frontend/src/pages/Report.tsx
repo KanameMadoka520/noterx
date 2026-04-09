@@ -217,7 +217,7 @@ export default function Report() {
             </Box>
             <Box sx={card}>
               <Typography sx={{ fontWeight: 600, fontSize: 15, color: "#262626", mb: 2 }}>优化建议</Typography>
-              <SuggestionList suggestions={report.suggestions} />
+              <SuggestionList suggestions={report.suggestions || []} />
             </Box>
           </Box>
 
@@ -399,12 +399,12 @@ export default function Report() {
           <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "3fr 2fr" }, gap: sectionGap, mb: sectionGap }}>
             <Box sx={card}>
               <Typography sx={{ fontWeight: 600, fontSize: 15, color: "#262626", mb: 2 }}>Agent 诊断详情</Typography>
-              <AgentDebate opinions={report.agent_opinions} summary={report.debate_summary} timeline={report.debate_timeline} />
+              <AgentDebate opinions={report.agent_opinions || []} summary={report.debate_summary || ""} timeline={report.debate_timeline || []} />
             </Box>
             <Box sx={card}>
               <Typography sx={{ fontWeight: 600, fontSize: 15, color: "#262626", mb: 2 }}>模拟评论区</Typography>
               <SimulatedComments
-                comments={report.simulated_comments}
+                comments={report.simulated_comments || []}
                 noteTitle={params.title}
                 noteContent={params.content || ""}
                 noteCategory={params.category}

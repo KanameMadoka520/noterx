@@ -527,6 +527,8 @@ export default function Home() {
   const isFormBlocked = files.length > 0 && !allRecognitionDone;
 
   const [submitError, setSubmitError] = useState("");
+  // Auto-clear error when user fixes the condition
+  useEffect(() => { if (submitError) setSubmitError(""); }, [files.length, title]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleSubmit = () => {
     if (files.length === 0) { setSubmitError("请先上传笔记截图"); return; }
