@@ -40,23 +40,29 @@ SLOT_LABELS = {
     "comments": "评论区截图",
 }
 
-_QUICK_PROMPT = """你是一个小红书内容理解助手。请快速、准确地分析这张截图。
+_QUICK_PROMPT = """你是小红书截图文字提取工具。严格按规则提取，禁止编造。
 
-规则：
+## 铁律（违反即失败）
+- **只提取图片中实际可见的文字**。看不清、看不到就留空字符串""。
+- **严禁推测、补全、编造**任何图中不存在的内容。
+- 如果对提取结果没有把握，confidence 设 < 0.5，宁可留空也不要编。
+
+## 字段规则
 1) slot_type：cover / content / profile / comments / other
-   - 「笔记详情」：标题 + 正文/标签所在区域（含发布编辑态）。
-   - 若**同一张图**内同时有「笔记详情区」与「评论区」（左右/上下分屏、画中画、拼图），主类型**必须**为 **content**：从**详情区**提取 title、content_text，勿把评论列表当正文；仅当整屏几乎只有评论、看不到详情正文时，才判 comments。
-   - 单图仅为封面、主页、纯评论单屏时，按单一类型判定。
-2) extra_slots：数组。主类型为 content 且同屏明显含评论区时包含 "comments"；否则 []。
-3) category：垂类（穿搭、美食、数码、旅行、美妆、健身、生活、家居等）。
-4) title / content_text：
-   - content：尽力提取可见标题与正文/标签。
-   - cover：封面大字主标题写入 title；正文一般 content_text 留空。
-   - profile / comments / other：以该界面为主时 title、content_text 可优先留空；**但画面中若有清晰的笔记标题或封面主标题，仍写入 title**；勿把评论区句子当正文写入 content_text。
-5) summary：1～2 句；分屏可注明含详情与评论。
-6) confidence：0～1。
-
-重要：封面主标题、笔记标题只要清晰务必写入 title；不要因类型误判就留空。看不清则不臆造。
+   - content = 笔记详情页（有标题+正文+标签）
+   - cover = 只有封面图片（没有正文详情）
+   - 同屏有详情+评论区 → 主类型为 content
+2) extra_slots：同屏含评论区时 ["comments"]，否则 []
+3) category：垂类（美食/穿搭/科技/旅行/生活 等）
+4) title：
+   - **只有在 content 类型**截图中，提取页面顶部的**笔记标题**（通常是粗体大字）
+   - **cover 类型**：title 留空 ""（封面上的文字是装饰/营销文案，不是笔记标题）
+   - profile / comments：title 留空 ""
+5) content_text：
+   - content 类型：提取正文文字和标签
+   - 其他类型：留空 ""
+6) summary：1-2句概括图片内容
+7) confidence：0-1，诚实反映你的把握程度
 
 仅输出 JSON：
 {"slot_type": "cover|content|profile|comments|other", "extra_slots": [], "category": "", "title": "", "content_text": "", "summary": "", "confidence": 0.0}"""
@@ -151,11 +157,13 @@ def _normalize_slot_type(raw: object) -> str:
 
 def _prepare_quick_recognize_image(image_bytes: bytes) -> tuple[bytes, str]:
     """
-    快识前压缩：限制长边、输出 JPEG，降低上传与视觉推理耗时；小图保持原字节与 MIME。
+    快识前智能压缩。
+    - 长图(h>2w): 保留宽度可读性(最大1024px宽, 最大4096px高), 文字不会缩到看不清
+    - 普通图: 限制长边到 max_edge
     @returns (image_bytes, image_mime)
     """
     max_edge = int(os.getenv("QUICK_RECOGNIZE_MAX_EDGE", "1280"))
-    quality = int(os.getenv("QUICK_RECOGNIZE_JPEG_QUALITY", "90"))
+    quality = int(os.getenv("QUICK_RECOGNIZE_JPEG_QUALITY", "92"))
     mime_map = {
         "JPEG": "image/jpeg",
         "PNG": "image/png",
@@ -179,9 +187,29 @@ def _prepare_quick_recognize_image(image_bytes: bytes) -> tuple[bytes, str]:
         w, h = im.size
         fmt = (im.format or "PNG").upper()
         mime = mime_map.get(fmt, "image/png")
-        if max(w, h) <= max_edge:
+
+        need_resize = False
+
+        if h > 2 * w:
+            # === 长图特殊处理: 保留宽度可读性 ===
+            LONG_MAX_W = 1024
+            LONG_MAX_H = 4096
+            target_w = min(w, LONG_MAX_W)
+            scale = target_w / w
+            target_h = min(int(h * scale), LONG_MAX_H)
+            if (target_w, target_h) != (w, h):
+                im = im.resize((target_w, target_h), Image.Resampling.LANCZOS)
+                need_resize = True
+            logger.info("长图缩图: %dx%d → %dx%d", w, h, target_w, target_h)
+        else:
+            # === 普通图: 限制长边 ===
+            if max(w, h) > max_edge:
+                im.thumbnail((max_edge, max_edge), Image.Resampling.LANCZOS)
+                need_resize = True
+
+        if not need_resize and max(w, h) <= max_edge:
             return image_bytes, mime
-        im.thumbnail((max_edge, max_edge), Image.Resampling.LANCZOS)
+
         buf = BytesIO()
         im.save(buf, format="JPEG", quality=quality, optimize=True)
         return buf.getvalue(), "image/jpeg"
